@@ -59,7 +59,7 @@ Dokumen ini berisi spesifikasi REST API backend untuk sistem absensi berbasis GP
 
 | Environment | URL |
 |-------------|-----|
-| **Production** | `https://[TBD].up.railway.app/api` *(update setelah deploy)* |
+| **Production** | `https://tubes-ltka-kelompok5-production.up.railway.app/health` *(update setelah deploy)* |
 | **Local Dev** | `http://localhost:3000/api` |
 
 > ⚠️ URL Production akan di-update di dokumen ini begitu Railway deploy berhasil.
