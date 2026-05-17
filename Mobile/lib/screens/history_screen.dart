@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:absensi_lokasi/config/theme.dart';
 import 'package:absensi_lokasi/models/attendance_model.dart';
-import 'package:absensi_lokasi/services/auth_service.dart';
 import 'package:absensi_lokasi/services/attendance_service.dart';
 import 'package:absensi_lokasi/widgets/attendance_card.dart';
 
@@ -15,7 +14,6 @@ class HistoryScreen extends StatefulWidget {
 
 class _HistoryScreenState extends State<HistoryScreen> {
   final _attendanceService = AttendanceService();
-  final _authService = AuthService();
 
   List<AttendanceModel> _attendances = [];
   bool _isLoading = true;
@@ -33,16 +31,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       _errorMessage = null;
     });
 
-    final user = await _authService.getCurrentUser();
-    if (user == null) {
-      setState(() {
-        _isLoading = false;
-        _errorMessage = 'Sesi berakhir. Silakan login kembali.';
-      });
-      return;
-    }
-
-    final result = await _attendanceService.getHistory(user.id);
+    final result = await _attendanceService.getMyHistory();
     if (mounted) {
       setState(() {
         _isLoading = false;
@@ -76,7 +65,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Widget _buildHeader() {
     final hadirCount =
-        _attendances.where((a) => a.status == 'hadir').length;
+        _attendances.where((a) => a.status == 'present').length;
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
       child: Row(

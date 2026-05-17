@@ -6,16 +6,22 @@ class AppConstants {
   // API Configuration
   // ============================================================
 
-  /// TODO: Ganti dengan URL backend production Anda
-  static const String baseUrl = 'https://your-api-server.com/api';
+  /// TODO: Ganti dengan URL backend Railway production Anda
+  static const String baseUrl = 'http://localhost:3000/api';
 
-  // Auth endpoints
-  static const String loginEndpoint = '/auth/login';
-  static const String registerEndpoint = '/auth/register';
+  // --- User endpoints ---
+  static const String createUserEndpoint = '/users';         // POST: simpan nama, role, nim
+  static const String getUserMeEndpoint = '/users/me';       // GET: data user yang login
 
-  // Attendance endpoints
-  static const String checkInEndpoint = '/attendance/check-in';
-  static const String historyEndpoint = '/attendance/history';
+  // --- Course endpoints ---
+  static const String coursesEndpoint = '/courses';           // GET: list mata kuliah
+
+  // --- Session endpoints ---
+  static const String activeSessionsEndpoint = '/sessions/active'; // GET: sesi absensi aktif
+
+  // --- Attendance endpoints ---
+  static const String attendancesEndpoint = '/attendances';   // POST: submit absensi
+  static const String myAttendancesEndpoint = '/attendances/me'; // GET: riwayat absensi
 
   // ============================================================
   // GPS / Geofencing Configuration
@@ -45,15 +51,24 @@ class AppConstants {
   static const int lateToleranceMinutes = 15;
 
   // ============================================================
-  // SharedPreferences Keys
+  // SharedPreferences Keys (untuk cache profil saja)
   // ============================================================
 
-  static const String prefToken = 'auth_token';
-  static const String prefUserId = 'user_id';
   static const String prefUserName = 'user_name';
   static const String prefUserNim = 'user_nim';
   static const String prefUserEmail = 'user_email';
-  static const String prefIsLoggedIn = 'is_logged_in';
+  static const String prefUserRole = 'user_role';
+
+  // ============================================================
+  // Backend Error Codes
+  // ============================================================
+
+  static const String errorOutOfRadius = 'OUT_OF_RADIUS';
+  static const String errorAlreadySubmitted = 'ALREADY_SUBMITTED';
+  static const String errorSessionClosed = 'SESSION_CLOSED';
+  static const String errorSessionNotStarted = 'SESSION_NOT_STARTED';
+  static const String errorTokenExpired = 'TOKEN_EXPIRED';
+  static const String errorNotEnrolled = 'NOT_ENROLLED';
 
   // ============================================================
   // App Info

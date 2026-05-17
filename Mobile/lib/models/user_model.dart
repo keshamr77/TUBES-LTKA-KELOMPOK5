@@ -1,40 +1,40 @@
 /// Model data pengguna (mahasiswa)
-/// Menyimpan informasi identitas dan token autentikasi.
+/// Menyimpan informasi identitas dari backend /api/users/me.
+/// Token TIDAK disimpan di model — dikelola oleh Firebase Auth.
 class UserModel {
   final String id;
   final String name;
   final String nim;
   final String email;
-  final String token;
+  final String role;
 
   const UserModel({
     required this.id,
     required this.name,
     required this.nim,
     required this.email,
-    required this.token,
+    this.role = 'student',
   });
 
-  /// Parsing dari JSON response API
-  factory UserModel.fromJson(Map<String, dynamic> json, {String? token}) {
-    final user = json['user'] ?? json;
+  /// Parsing dari JSON response GET /api/users/me
+  /// Format: { "success": true, "data": { "id", "name", "nim", "email", "role" } }
+  factory UserModel.fromJson(Map<String, dynamic> json) {
+    final data = json['data'] ?? json;
     return UserModel(
-      id: user['id']?.toString() ?? '',
-      name: user['name']?.toString() ?? '',
-      nim: user['nim']?.toString() ?? '',
-      email: user['email']?.toString() ?? '',
-      token: token ?? json['token']?.toString() ?? '',
+      id: data['id']?.toString() ?? '',
+      name: data['name']?.toString() ?? '',
+      nim: data['nim']?.toString() ?? '',
+      email: data['email']?.toString() ?? '',
+      role: data['role']?.toString() ?? 'student',
     );
   }
 
-  /// Konversi ke JSON untuk penyimpanan lokal
+  /// Konversi ke JSON untuk POST /api/users (setelah register)
   Map<String, dynamic> toJson() {
     return {
-      'id': id,
       'name': name,
       'nim': nim,
-      'email': email,
-      'token': token,
+      'role': role,
     };
   }
 
@@ -44,14 +44,14 @@ class UserModel {
     String? name,
     String? nim,
     String? email,
-    String? token,
+    String? role,
   }) {
     return UserModel(
       id: id ?? this.id,
       name: name ?? this.name,
       nim: nim ?? this.nim,
       email: email ?? this.email,
-      token: token ?? this.token,
+      role: role ?? this.role,
     );
   }
 

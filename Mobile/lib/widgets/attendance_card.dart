@@ -100,11 +100,11 @@ class AttendanceCard extends StatelessWidget {
 
   Color get _statusColor {
     switch (attendance.status) {
-      case 'hadir':
+      case 'present':
         return AppTheme.accentGreen;
-      case 'terlambat':
+      case 'late':
         return AppTheme.accentAmber;
-      case 'tidak_hadir':
+      case 'invalid':
         return AppTheme.accentRed;
       default:
         return AppTheme.textHint;
@@ -113,11 +113,11 @@ class AttendanceCard extends StatelessWidget {
 
   IconData get _statusIcon {
     switch (attendance.status) {
-      case 'hadir':
+      case 'present':
         return Icons.check_circle_outline;
-      case 'terlambat':
+      case 'late':
         return Icons.schedule;
-      case 'tidak_hadir':
+      case 'invalid':
         return Icons.cancel_outlined;
       default:
         return Icons.help_outline;

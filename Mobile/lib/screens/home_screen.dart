@@ -57,7 +57,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _initLocation();
   }
 
-  /// Muat data user dari SharedPreferences
+  /// Muat data user dari backend / cache
   Future<void> _loadUser() async {
     final user = await _authService.getCurrentUser();
     if (mounted) {
@@ -168,8 +168,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
     setState(() => _isSubmitting = true);
 
-    final result = await _attendanceService.checkIn(
-      studentId: _user!.id,
+    // TODO: Ganti dengan sessionId dari halaman pilih sesi aktif
+    // Sementara pakai placeholder — nanti ambil dari GET /api/sessions/active
+    const sessionId = 'active_session';
+
+    final result = await _attendanceService.submitAttendance(
+      sessionId: sessionId,
       latitude: _latitude!,
       longitude: _longitude!,
     );
