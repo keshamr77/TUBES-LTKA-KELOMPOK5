@@ -15,10 +15,6 @@ dependencies:
   google_fonts: ^8.1.0
   intl: ^0.20.2
 
-  # Firebase
-  firebase_core: ^3.13.0
-  firebase_auth: ^5.5.4
-
   # Networking
   http: ^1.2.0
 
@@ -26,11 +22,12 @@ dependencies:
   geolocator: ^14.0.2
   permission_handler: ^12.0.1
 
-  # Local Storage (untuk cache user profile saja, bukan token)
+  # Local Storage
   shared_preferences: ^2.2.2
 
-  # Animations
-  flutter_spinkit: ^5.2.1
+  # Phase 2: Uncomment saat backend sudah verify Firebase token
+  # firebase_core: ^3.13.0
+  # firebase_auth: ^5.5.4
 
 dev_dependencies:
   flutter_test:

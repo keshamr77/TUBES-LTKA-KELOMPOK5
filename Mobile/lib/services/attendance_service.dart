@@ -3,7 +3,9 @@ import 'package:absensi_lokasi/models/attendance_model.dart';
 import 'package:absensi_lokasi/services/api_service.dart';
 
 /// Service untuk operasi absensi.
-/// Menangani submit absensi dan pengambilan riwayat.
+/// Disesuaikan dengan backend Phase 1:
+///   POST /api/attendances  → submit absensi (sessionId, lat, lng, selfieUrl WAJIB)
+///   GET  /api/attendances/me → riwayat absensi
 class AttendanceService {
   static final AttendanceService _instance = AttendanceService._internal();
   factory AttendanceService() => _instance;
@@ -17,11 +19,19 @@ class AttendanceService {
 
   /// Kirim absensi ke server
   /// POST /api/attendances
-  /// Body: { "sessionId": "...", "latitude": ..., "longitude": ... }
+  ///
+  /// Body yang WAJIB (sesuai backend attendances.ts):
+  /// {
+  ///   "sessionId": "sess_001",
+  ///   "latitude": -6.97285,
+  ///   "longitude": 107.63042,
+  ///   "selfieUrl": "https://..." ← WAJIB di Phase 1
+  /// }
   Future<AttendanceResult> submitAttendance({
     required String sessionId,
     required double latitude,
     required double longitude,
+    String selfieUrl = 'https://placeholder.com/selfie.jpg',
   }) async {
     final response = await _api.post(
       AppConstants.attendancesEndpoint,
@@ -29,23 +39,22 @@ class AttendanceService {
         'sessionId': sessionId,
         'latitude': latitude,
         'longitude': longitude,
+        'selfieUrl': selfieUrl,
       },
     );
 
-    if (response.success) {
+    if (response.success && response.data != null) {
       AttendanceModel? attendance;
-      if (response.data != null) {
-        try {
-          final attendanceData = response.data!['data'] ?? response.data;
-          attendance = AttendanceModel.fromJson(
-            attendanceData is Map<String, dynamic> ? attendanceData : {},
-          );
-        } catch (_) {}
-      }
+      try {
+        final data = response.data!['data'] ?? response.data;
+        if (data is Map<String, dynamic>) {
+          attendance = AttendanceModel.fromPostResponse(data);
+        }
+      } catch (_) {}
 
       return AttendanceResult(
         success: true,
-        message: response.data?['message']?.toString() ?? 'Absensi berhasil',
+        message: 'Absensi berhasil dicatat!',
         attendance: attendance,
       );
     }
@@ -56,6 +65,7 @@ class AttendanceService {
       message: _mapErrorMessage(response.errorCode, response.message),
       errorCode: response.errorCode,
       distanceMeters: _extractDistance(response.data),
+      allowedRadius: _extractAllowedRadius(response.data),
     );
   }
 
@@ -64,9 +74,14 @@ class AttendanceService {
   // ============================================================
 
   /// Ambil riwayat absensi user yang login
-  /// GET /api/attendances/me (backend menggunakan token untuk identifikasi)
-  Future<AttendanceHistoryResult> getMyHistory() async {
-    final response = await _api.get(AppConstants.myAttendancesEndpoint);
+  /// GET /api/attendances/me
+  ///
+  /// Response: { success: true, data: [ { attendanceId, session, timestamp, status, distanceMeters } ] }
+  Future<AttendanceHistoryResult> getMyHistory({int limit = 20}) async {
+    final response = await _api.get(
+      AppConstants.myAttendancesEndpoint,
+      queryParams: {'limit': limit.toString()},
+    );
 
     if (response.success && response.data != null) {
       try {
@@ -112,17 +127,36 @@ class AttendanceService {
         return 'Sesi absensi belum dibuka.';
       case AppConstants.errorNotEnrolled:
         return 'Anda tidak terdaftar di mata kuliah ini.';
+      case AppConstants.errorInvalidPayload:
+        return 'Data tidak lengkap atau tidak valid.';
       default:
         return fallback;
     }
   }
 
   /// Ekstrak jarak dari error response OUT_OF_RADIUS
+  /// Backend format: { error: { details: { distanceMeters: 245.7 } } }
   double? _extractDistance(Map<String, dynamic>? data) {
     if (data == null) return null;
     final error = data['error'];
     if (error is Map<String, dynamic>) {
-      return (error['distanceMeters'] as num?)?.toDouble();
+      final details = error['details'];
+      if (details is Map<String, dynamic>) {
+        return (details['distanceMeters'] as num?)?.toDouble();
+      }
+    }
+    return null;
+  }
+
+  /// Ekstrak allowed radius dari error response OUT_OF_RADIUS
+  double? _extractAllowedRadius(Map<String, dynamic>? data) {
+    if (data == null) return null;
+    final error = data['error'];
+    if (error is Map<String, dynamic>) {
+      final details = error['details'];
+      if (details is Map<String, dynamic>) {
+        return (details['allowedRadiusMeters'] as num?)?.toDouble();
+      }
     }
     return null;
   }
@@ -134,7 +168,8 @@ class AttendanceResult {
   final String message;
   final String errorCode;
   final AttendanceModel? attendance;
-  final double? distanceMeters; // Jarak dari kampus (untuk OUT_OF_RADIUS)
+  final double? distanceMeters;
+  final double? allowedRadius;
 
   const AttendanceResult({
     required this.success,
@@ -142,6 +177,7 @@ class AttendanceResult {
     this.errorCode = '',
     this.attendance,
     this.distanceMeters,
+    this.allowedRadius,
   });
 }
 

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:absensi_lokasi/config/constants.dart';
 import 'package:absensi_lokasi/config/theme.dart';
+import 'package:absensi_lokasi/services/auth_service.dart';
 import 'package:absensi_lokasi/screens/login_screen.dart';
 import 'package:absensi_lokasi/screens/main_navigation.dart';
 
@@ -50,7 +50,7 @@ class _SplashScreenState extends State<SplashScreen>
 
     if (!mounted) return;
 
-    final isLoggedIn = FirebaseAuth.instance.currentUser != null;
+    final isLoggedIn = await AuthService().isLoggedIn();
 
     if (!mounted) return;
 

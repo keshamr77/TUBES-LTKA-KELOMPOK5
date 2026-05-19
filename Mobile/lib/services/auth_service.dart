@@ -1,233 +1,141 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:absensi_lokasi/config/constants.dart';
 import 'package:absensi_lokasi/models/user_model.dart';
-import 'package:absensi_lokasi/services/api_service.dart';
 
-/// Service untuk autentikasi pengguna menggunakan Firebase Auth.
-/// Login & register 100% via Firebase Auth SDK.
-/// Setelah register, kirim POST /api/users untuk simpan nama & NIM di backend.
+/// Service untuk autentikasi pengguna.
+///
+/// Phase 1 (mock mode):
+///   - Backend BELUM verify Firebase token
+///   - Login/register disimulasikan lokal (SharedPreferences)
+///   - User ID = AppConstants.mockUserId
+///
+/// Phase 2 (production):
+///   - Ganti ke Firebase Auth SDK (signInWithEmailAndPassword, dll)
+///   - Hapus mock login/register
 class AuthService {
   static final AuthService _instance = AuthService._internal();
   factory AuthService() => _instance;
   AuthService._internal();
 
-  final FirebaseAuth _firebaseAuth = FirebaseAuth.instance;
-  final ApiService _api = ApiService();
-
   // ============================================================
-  // Login via Firebase Auth
+  // Login (Phase 1: Lokal, Phase 2: Firebase Auth)
   // ============================================================
 
-  /// Login dengan email dan password menggunakan Firebase Auth
+  /// Login — Phase 1: simpan ke SharedPreferences saja
   Future<AuthResult> login(String email, String password) async {
-    try {
-      final credential = await _firebaseAuth.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-
-      if (credential.user == null) {
-        return AuthResult(success: false, message: 'Login gagal. Coba lagi.');
-      }
-
-      // Ambil data profil dari backend
-      final user = await _fetchUserProfile();
-
-      return AuthResult(
-        success: true,
-        message: 'Login berhasil',
-        user: user,
-      );
-    } on FirebaseAuthException catch (e) {
-      return AuthResult(
-        success: false,
-        message: _mapFirebaseError(e.code),
-      );
-    } catch (e) {
-      return AuthResult(
-        success: false,
-        message: 'Terjadi kesalahan: ${e.toString()}',
-      );
+    // Phase 1: Simulasi login lokal (tidak ada backend auth)
+    // Minimal validation
+    if (email.isEmpty || password.isEmpty) {
+      return AuthResult(success: false, message: 'Email dan password wajib diisi.');
     }
+
+    if (password.length < 6) {
+      return AuthResult(success: false, message: 'Password minimal 6 karakter.');
+    }
+
+    // Simpan ke SharedPreferences sebagai "logged in"
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('is_logged_in', true);
+    await prefs.setString(AppConstants.prefUserEmail, email);
+    // Jika belum ada nama, pakai email prefix
+    if (prefs.getString(AppConstants.prefUserName) == null) {
+      await prefs.setString(AppConstants.prefUserName, email.split('@').first);
+    }
+
+    final user = UserModel(
+      id: AppConstants.mockUserId,
+      name: prefs.getString(AppConstants.prefUserName) ?? email.split('@').first,
+      nim: prefs.getString(AppConstants.prefUserNim) ?? '',
+      email: email,
+    );
+
+    return AuthResult(success: true, message: 'Login berhasil', user: user);
+
+    // Phase 2: Uncomment ini
+    // final cred = await FirebaseAuth.instance.signInWithEmailAndPassword(
+    //   email: email, password: password);
+    // ...
   }
 
   // ============================================================
-  // Register via Firebase Auth + POST /api/users
+  // Register (Phase 1: Lokal, Phase 2: Firebase + POST /api/users)
   // ============================================================
 
-  /// Registrasi akun baru via Firebase Auth,
-  /// lalu simpan nama & NIM ke backend via POST /api/users
+  /// Register — Phase 1: simpan data ke SharedPreferences
   Future<AuthResult> register(
     String name,
     String nim,
     String email,
     String password,
   ) async {
-    try {
-      // 1. Buat akun di Firebase Auth
-      final credential = await _firebaseAuth.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-
-      if (credential.user == null) {
-        return AuthResult(success: false, message: 'Registrasi gagal. Coba lagi.');
-      }
-
-      // 2. Update display name di Firebase
-      await credential.user!.updateDisplayName(name);
-
-      // 3. Simpan data ke backend
-      final response = await _api.post(
-        AppConstants.createUserEndpoint,
-        body: {
-          'name': name,
-          'nim': nim,
-          'role': 'student',
-        },
-      );
-
-      if (!response.success) {
-        // Backend gagal tapi akun Firebase sudah terbuat — log warning
-        // User masih bisa login, tapi profil perlu di-sync ulang nanti
-      }
-
-      // 4. Cache profil lokal
-      await _cacheUserProfile(name: name, nim: nim, email: email);
-
-      final user = UserModel(
-        id: credential.user!.uid,
-        name: name,
-        nim: nim,
-        email: email,
-        role: 'student',
-      );
-
-      return AuthResult(
-        success: true,
-        message: 'Registrasi berhasil',
-        user: user,
-      );
-    } on FirebaseAuthException catch (e) {
-      return AuthResult(
-        success: false,
-        message: _mapFirebaseError(e.code),
-      );
-    } catch (e) {
-      return AuthResult(
-        success: false,
-        message: 'Terjadi kesalahan: ${e.toString()}',
-      );
+    if (name.isEmpty || email.isEmpty || password.isEmpty) {
+      return AuthResult(success: false, message: 'Semua field wajib diisi.');
     }
+
+    if (password.length < 6) {
+      return AuthResult(success: false, message: 'Password minimal 6 karakter.');
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('is_logged_in', true);
+    await prefs.setString(AppConstants.prefUserName, name);
+    await prefs.setString(AppConstants.prefUserNim, nim);
+    await prefs.setString(AppConstants.prefUserEmail, email);
+
+    final user = UserModel(
+      id: AppConstants.mockUserId,
+      name: name,
+      nim: nim,
+      email: email,
+    );
+
+    return AuthResult(success: true, message: 'Registrasi berhasil', user: user);
+
+    // Phase 2: Uncomment ini
+    // final cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(...);
+    // await ApiService().post('/users', body: { 'name': name, 'nim': nim, 'role': 'student' });
   }
 
   // ============================================================
   // Logout
   // ============================================================
 
-  /// Logout dari Firebase Auth dan hapus cache lokal
+  /// Logout dan hapus data lokal
   Future<void> logout() async {
-    await _firebaseAuth.signOut();
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
+    // Phase 2: await FirebaseAuth.instance.signOut();
   }
 
   // ============================================================
   // Session Check
   // ============================================================
 
-  /// Cek apakah user sudah login (Firebase Auth state)
+  /// Cek apakah user sudah login
   Future<bool> isLoggedIn() async {
-    return _firebaseAuth.currentUser != null;
-  }
-
-  /// Ambil Firebase ID token untuk request API
-  Future<String?> getToken({bool forceRefresh = false}) async {
-    final user = _firebaseAuth.currentUser;
-    if (user == null) return null;
-    return await user.getIdToken(forceRefresh);
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('is_logged_in') ?? false;
+    // Phase 2: return FirebaseAuth.instance.currentUser != null;
   }
 
   // ============================================================
   // User Profile
   // ============================================================
 
-  /// Ambil data user dari backend GET /api/users/me
-  /// Fallback ke cache lokal jika offline
+  /// Ambil data user dari SharedPreferences
   Future<UserModel?> getCurrentUser() async {
-    final firebaseUser = _firebaseAuth.currentUser;
-    if (firebaseUser == null) return null;
-
-    // Coba ambil dari backend
-    final response = await _api.get(AppConstants.getUserMeEndpoint);
-    if (response.success && response.data != null) {
-      final user = UserModel.fromJson(response.data!);
-      // Update cache
-      await _cacheUserProfile(
-        name: user.name,
-        nim: user.nim,
-        email: user.email,
-      );
-      return user;
-    }
-
-    // Fallback ke cache lokal
-    return await _getCachedUser(firebaseUser);
-  }
-
-  /// Ambil user dari cache SharedPreferences
-  Future<UserModel> _getCachedUser(User firebaseUser) async {
     final prefs = await SharedPreferences.getInstance();
+    final isLoggedIn = prefs.getBool('is_logged_in') ?? false;
+    if (!isLoggedIn) return null;
+
     return UserModel(
-      id: firebaseUser.uid,
-      name: prefs.getString(AppConstants.prefUserName) ?? firebaseUser.displayName ?? '',
+      id: AppConstants.mockUserId,
+      name: prefs.getString(AppConstants.prefUserName) ?? '',
       nim: prefs.getString(AppConstants.prefUserNim) ?? '',
-      email: prefs.getString(AppConstants.prefUserEmail) ?? firebaseUser.email ?? '',
-      role: prefs.getString(AppConstants.prefUserRole) ?? 'student',
+      email: prefs.getString(AppConstants.prefUserEmail) ?? '',
     );
-  }
 
-  /// Cache profil user ke SharedPreferences
-  Future<void> _cacheUserProfile({
-    required String name,
-    required String nim,
-    required String email,
-  }) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(AppConstants.prefUserName, name);
-    await prefs.setString(AppConstants.prefUserNim, nim);
-    await prefs.setString(AppConstants.prefUserEmail, email);
-  }
-
-  // ============================================================
-  // Firebase Error Mapping
-  // ============================================================
-
-  /// Terjemahkan kode error Firebase ke pesan Bahasa Indonesia
-  String _mapFirebaseError(String code) {
-    switch (code) {
-      case 'user-not-found':
-        return 'Akun tidak ditemukan. Periksa email Anda.';
-      case 'wrong-password':
-        return 'Kata sandi salah. Coba lagi.';
-      case 'invalid-email':
-        return 'Format email tidak valid.';
-      case 'user-disabled':
-        return 'Akun ini telah dinonaktifkan.';
-      case 'email-already-in-use':
-        return 'Email sudah terdaftar. Silakan login.';
-      case 'weak-password':
-        return 'Kata sandi terlalu lemah. Minimal 6 karakter.';
-      case 'too-many-requests':
-        return 'Terlalu banyak percobaan. Coba lagi nanti.';
-      case 'network-request-failed':
-        return 'Tidak ada koneksi internet.';
-      case 'invalid-credential':
-        return 'Email atau kata sandi salah.';
-      default:
-        return 'Terjadi kesalahan autentikasi ($code).';
-    }
+    // Phase 2: fetch dari GET /api/users/me
   }
 }
 

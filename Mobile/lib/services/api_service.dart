@@ -1,12 +1,18 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:absensi_lokasi/config/constants.dart';
 
 /// Service untuk komunikasi dengan backend REST API.
-/// Token diambil dari Firebase Auth, BUKAN SharedPreferences.
-/// Mendukung auto-retry saat TOKEN_EXPIRED.
+///
+/// Phase 1 (mock mode):
+///   - Backend BELUM verify Firebase token
+///   - Identifikasi user via header X-Mock-User-Id
+///   - Hanya 2 endpoint: POST /api/attendances, GET /api/attendances/me
+///
+/// Phase 2 (production):
+///   - Ganti _getHeaders() untuk pakai Firebase Auth token
+///   - Hapus X-Mock-User-Id header
 class ApiService {
   static final ApiService _instance = ApiService._internal();
   factory ApiService() => _instance;
@@ -15,21 +21,12 @@ class ApiService {
   final String _baseUrl = AppConstants.baseUrl;
 
   // ============================================================
-  // Token dari Firebase Auth
-  // ============================================================
-
-  /// Ambil Firebase ID token dari user yang sedang login
-  Future<String?> _getFirebaseToken({bool forceRefresh = false}) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return null;
-    return await user.getIdToken(forceRefresh);
-  }
-
-  // ============================================================
   // Header Builder
   // ============================================================
 
-  /// Membuat headers dengan Bearer token Firebase
+  /// Membuat headers untuk request.
+  /// Phase 1: pakai X-Mock-User-Id
+  /// Phase 2: ganti ke Bearer token Firebase
   Future<Map<String, String>> _getHeaders({bool withAuth = true}) async {
     final headers = {
       'Content-Type': 'application/json',
@@ -37,10 +34,12 @@ class ApiService {
     };
 
     if (withAuth) {
-      final token = await _getFirebaseToken();
-      if (token != null && token.isNotEmpty) {
-        headers['Authorization'] = 'Bearer $token';
-      }
+      // Phase 1: Mock user ID
+      headers['X-Mock-User-Id'] = AppConstants.mockUserId;
+
+      // Phase 2: Uncomment ini dan hapus line di atas
+      // final token = await FirebaseAuth.instance.currentUser?.getIdToken();
+      // if (token != null) headers['Authorization'] = 'Bearer $token';
     }
 
     return headers;
@@ -67,7 +66,7 @@ class ApiService {
           .get(uri, headers: headers)
           .timeout(const Duration(seconds: 30));
 
-      return _handleResponse(response, 'GET', endpoint);
+      return _handleResponse(response);
     } on SocketException {
       return ApiResponse.networkError();
     } on HttpException {
@@ -94,7 +93,7 @@ class ApiService {
           .post(uri, headers: headers, body: jsonEncode(body))
           .timeout(const Duration(seconds: 30));
 
-      return _handleResponse(response, 'POST', endpoint);
+      return _handleResponse(response);
     } on SocketException {
       return ApiResponse.networkError();
     } on HttpException {
@@ -115,11 +114,7 @@ class ApiService {
   /// Mengolah response HTTP sesuai format backend:
   /// Sukses: { "success": true, "data": { ... } }
   /// Error:  { "success": false, "error": { "code": "...", "message": "..." } }
-  Future<ApiResponse> _handleResponse(
-    http.Response response,
-    String method,
-    String endpoint,
-  ) async {
+  ApiResponse _handleResponse(http.Response response) {
     final statusCode = response.statusCode;
     Map<String, dynamic>? data;
 
@@ -129,62 +124,6 @@ class ApiService {
       data = null;
     }
 
-    // --- Handle 401: coba force refresh token sekali, lalu retry ---
-    if (statusCode == 401) {
-      final errorCode = data?['error']?['code']?.toString() ?? '';
-
-      // Coba refresh token sekali
-      final newToken = await _getFirebaseToken(forceRefresh: true);
-      if (newToken != null) {
-        // Retry request dengan token baru
-        try {
-          final headers = {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Authorization': 'Bearer $newToken',
-          };
-
-          http.Response retryResponse;
-          final uri = Uri.parse('$_baseUrl$endpoint');
-
-          if (method == 'POST') {
-            retryResponse = await http
-                .post(uri, headers: headers, body: response.request?.headers['body'])
-                .timeout(const Duration(seconds: 30));
-          } else {
-            retryResponse = await http
-                .get(uri, headers: headers)
-                .timeout(const Duration(seconds: 30));
-          }
-
-          // Jika retry berhasil, proses response-nya
-          if (retryResponse.statusCode != 401) {
-            Map<String, dynamic>? retryData;
-            try {
-              retryData = jsonDecode(retryResponse.body) as Map<String, dynamic>;
-            } catch (_) {}
-
-            return _buildApiResponse(retryResponse.statusCode, retryData);
-          }
-        } catch (_) {}
-      }
-
-      // Retry gagal juga → force logout
-      await FirebaseAuth.instance.signOut();
-      return ApiResponse(
-        success: false,
-        message: 'Sesi telah berakhir. Silakan login kembali.',
-        statusCode: 401,
-        errorCode: errorCode,
-        data: data,
-      );
-    }
-
-    return _buildApiResponse(statusCode, data);
-  }
-
-  /// Build ApiResponse dari status code dan parsed data
-  ApiResponse _buildApiResponse(int statusCode, Map<String, dynamic>? data) {
     if (statusCode >= 200 && statusCode < 300) {
       return ApiResponse(
         success: true,
@@ -194,12 +133,12 @@ class ApiService {
       );
     }
 
-    // Error response dari backend
+    // Error response
     final error = data?['error'];
     final errorCode = error?['code']?.toString() ?? '';
-    final errorMessage = error?['message']?.toString()
-        ?? data?['message']?.toString()
-        ?? 'Terjadi kesalahan (Kode: $statusCode)';
+    final errorMessage = error?['message']?.toString() ??
+        data?['message']?.toString() ??
+        'Terjadi kesalahan (Kode: $statusCode)';
 
     return ApiResponse(
       success: false,
@@ -229,17 +168,17 @@ class ApiResponse {
 
   /// Shortcut untuk error jaringan
   factory ApiResponse.networkError() => const ApiResponse(
-    success: false,
-    message: 'Tidak ada koneksi internet. Periksa jaringan Anda.',
-    statusCode: 0,
-  );
+        success: false,
+        message: 'Tidak ada koneksi internet. Periksa jaringan Anda.',
+        statusCode: 0,
+      );
 
   /// Shortcut untuk error server
   factory ApiResponse.serverError() => const ApiResponse(
-    success: false,
-    message: 'Terjadi kesalahan pada server.',
-    statusCode: 0,
-  );
+        success: false,
+        message: 'Terjadi kesalahan pada server.',
+        statusCode: 0,
+      );
 
   /// Cek apakah error tertentu
   bool hasErrorCode(String code) => errorCode == code;

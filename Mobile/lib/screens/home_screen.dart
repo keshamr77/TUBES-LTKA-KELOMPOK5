@@ -168,9 +168,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
     setState(() => _isSubmitting = true);
 
-    // TODO: Ganti dengan sessionId dari halaman pilih sesi aktif
-    // Sementara pakai placeholder — nanti ambil dari GET /api/sessions/active
-    const sessionId = 'active_session';
+    // Phase 1: sessionId hardcoded (backend Phase 1 accepts any string)
+    // Phase 2: ambil dari GET /api/sessions/active
+    const sessionId = 'sess_mock_001';
 
     final result = await _attendanceService.submitAttendance(
       sessionId: sessionId,
@@ -185,12 +185,30 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       setState(() => _hasCheckedInToday = true);
       _showSuccessDialog();
     } else {
-      _showWarningDialog(
-        'Gagal Absen',
-        result.message,
-        Icons.error_outline,
-        AppTheme.accentRed,
-      );
+      // Handle error spesifik dari backend
+      String errorTitle = 'Gagal Absen';
+      IconData errorIcon = Icons.error_outline;
+      Color errorColor = AppTheme.accentRed;
+
+      if (result.errorCode == AppConstants.errorOutOfRadius) {
+        errorTitle = 'Di Luar Radius Kampus';
+        errorIcon = Icons.location_off;
+        // Tambahkan info jarak jika tersedia dari backend
+        String msg = result.message;
+        if (result.distanceMeters != null) {
+          msg += '\n\nJarak Anda: ${result.distanceMeters!.toStringAsFixed(1)} meter'
+              '\nRadius yang diizinkan: ${result.allowedRadius?.toStringAsFixed(0) ?? AppConstants.geofenceRadiusMeters.toStringAsFixed(0)} meter';
+        }
+        _showWarningDialog(errorTitle, msg, errorIcon, errorColor);
+        return;
+      } else if (result.errorCode == AppConstants.errorAlreadySubmitted) {
+        errorTitle = 'Sudah Absen';
+        errorIcon = Icons.check_circle;
+        errorColor = AppTheme.accentAmber;
+        setState(() => _hasCheckedInToday = true);
+      }
+
+      _showWarningDialog(errorTitle, result.message, errorIcon, errorColor);
     }
   }
 

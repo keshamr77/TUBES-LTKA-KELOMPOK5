@@ -1,55 +1,64 @@
 import 'package:intl/intl.dart';
 
 /// Model data absensi
-/// Menyimpan informasi kehadiran termasuk lokasi dan status.
-/// Status dari backend: 'present', 'late', 'invalid'
+/// Disesuaikan dengan response backend Phase 1:
+///
+/// POST /api/attendances response:
+///   { attendanceId, sessionId, distanceMeters, status, timestamp }
+///
+/// GET /api/attendances/me response:
+///   { attendanceId, session: { id, courseName }, timestamp, status, distanceMeters }
 class AttendanceModel {
   final String id;
   final String sessionId;
-  final String studentId;
+  final String? courseName;
   final double latitude;
   final double longitude;
   final DateTime timestamp;
   final String status; // 'present', 'late', 'invalid'
-  final String? courseName; // Nama mata kuliah (opsional, dari join)
+  final double distanceMeters;
 
   const AttendanceModel({
     required this.id,
     required this.sessionId,
-    required this.studentId,
-    required this.latitude,
-    required this.longitude,
+    this.courseName,
+    this.latitude = 0.0,
+    this.longitude = 0.0,
     required this.timestamp,
     required this.status,
-    this.courseName,
+    this.distanceMeters = 0.0,
   });
 
-  /// Parsing dari JSON response API
-  /// Backend mengembalikan: { id, sessionId, userId, latitude, longitude, timestamp, status }
-  factory AttendanceModel.fromJson(Map<String, dynamic> json) {
+  /// Parsing dari POST /api/attendances response (sukses)
+  /// { attendanceId, sessionId, distanceMeters, status, timestamp }
+  factory AttendanceModel.fromPostResponse(Map<String, dynamic> json) {
     return AttendanceModel(
-      id: json['id']?.toString() ?? '',
-      sessionId: json['sessionId']?.toString() ?? json['session_id']?.toString() ?? '',
-      studentId: json['userId']?.toString() ?? json['student_id']?.toString() ?? '',
+      id: json['attendanceId']?.toString() ?? '',
+      sessionId: json['sessionId']?.toString() ?? '',
+      timestamp: json['timestamp'] != null
+          ? DateTime.parse(json['timestamp'].toString())
+          : DateTime.now(),
+      status: json['status']?.toString() ?? 'present',
+      distanceMeters: (json['distanceMeters'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
+
+  /// Parsing dari GET /api/attendances/me response item
+  /// { attendanceId, session: { id, courseName }, timestamp, status, distanceMeters }
+  factory AttendanceModel.fromJson(Map<String, dynamic> json) {
+    final session = json['session'];
+    return AttendanceModel(
+      id: json['attendanceId']?.toString() ?? json['id']?.toString() ?? '',
+      sessionId: session?['id']?.toString() ?? json['sessionId']?.toString() ?? '',
+      courseName: session?['courseName']?.toString(),
       latitude: (json['latitude'] as num?)?.toDouble() ?? 0.0,
       longitude: (json['longitude'] as num?)?.toDouble() ?? 0.0,
       timestamp: json['timestamp'] != null
           ? DateTime.parse(json['timestamp'].toString())
-          : json['createdAt'] != null
-              ? DateTime.parse(json['createdAt'].toString())
-              : DateTime.now(),
-      status: json['status']?.toString() ?? 'invalid',
-      courseName: json['courseName']?.toString(),
+          : DateTime.now(),
+      status: json['status']?.toString() ?? 'present',
+      distanceMeters: (json['distanceMeters'] as num?)?.toDouble() ?? 0.0,
     );
-  }
-
-  /// Konversi ke JSON untuk POST /api/attendances
-  Map<String, dynamic> toJson() {
-    return {
-      'sessionId': sessionId,
-      'latitude': latitude,
-      'longitude': longitude,
-    };
   }
 
   /// Format tanggal: "Senin, 7 Mei 2026"
@@ -63,7 +72,7 @@ class AttendanceModel {
   }
 
   /// Label status dalam Bahasa Indonesia
-  /// Backend values → display: present→Hadir, late→Terlambat, invalid→Tidak Sah
+  /// Backend: present → Hadir, late → Terlambat, invalid → Tidak Sah
   String get statusLabel {
     switch (status) {
       case 'present':
@@ -77,7 +86,15 @@ class AttendanceModel {
     }
   }
 
+  /// Format jarak
+  String get distanceLabel {
+    if (distanceMeters < 1000) {
+      return '${distanceMeters.toStringAsFixed(1)} m';
+    }
+    return '${(distanceMeters / 1000).toStringAsFixed(2)} km';
+  }
+
   @override
   String toString() =>
-      'AttendanceModel(id: $id, status: $status, time: $formattedTime)';
+      'AttendanceModel(id: $id, status: $status, distance: ${distanceMeters.toStringAsFixed(1)}m)';
 }

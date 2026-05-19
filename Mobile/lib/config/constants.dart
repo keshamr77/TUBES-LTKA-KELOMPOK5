@@ -1,39 +1,42 @@
 /// Konstanta aplikasi Sistem Absensi Berbasis Lokasi
 /// File ini berisi semua konfigurasi statis yang digunakan di seluruh aplikasi.
+/// Disesuaikan dengan Backend Phase 1 (mock mode).
 
 class AppConstants {
   // ============================================================
   // API Configuration
   // ============================================================
 
-  /// TODO: Ganti dengan URL backend Railway production Anda
-  static const String baseUrl = 'http://localhost:3000/api';
+  /// Backend Railway Production URL
+  /// Backend Phase 1: mock mode, belum verify Firebase token
+  static const String baseUrl =
+      'https://tubes-ltka-kelompok5-production.up.railway.app/api';
 
-  // --- User endpoints ---
-  static const String createUserEndpoint = '/users';         // POST: simpan nama, role, nim
-  static const String getUserMeEndpoint = '/users/me';       // GET: data user yang login
+  /// Untuk development lokal (ganti baseUrl di atas jika perlu)
+  static const String localUrl = 'http://localhost:3000/api';
 
-  // --- Course endpoints ---
-  static const String coursesEndpoint = '/courses';           // GET: list mata kuliah
-
-  // --- Session endpoints ---
-  static const String activeSessionsEndpoint = '/sessions/active'; // GET: sesi absensi aktif
-
-  // --- Attendance endpoints ---
-  static const String attendancesEndpoint = '/attendances';   // POST: submit absensi
+  // --- Endpoints yang SUDAH ada di backend Phase 1 ---
+  static const String attendancesEndpoint = '/attendances';     // POST: submit absensi
   static const String myAttendancesEndpoint = '/attendances/me'; // GET: riwayat absensi
+
+  // --- Endpoints yang BELUM ada di backend (akan Phase 2) ---
+  // static const String createUserEndpoint = '/users';
+  // static const String getUserMeEndpoint = '/users/me';
+  // static const String coursesEndpoint = '/courses';
+  // static const String activeSessionsEndpoint = '/sessions/active';
 
   // ============================================================
   // GPS / Geofencing Configuration
+  // Harus COCOK dengan backend MOCK_CAMPUS di attendances.ts
   // ============================================================
 
-  /// Koordinat kampus ITB Ganesha (hardcoded)
-  static const double campusLatitude = -6.8915;
-  static const double campusLongitude = 107.6107;
+  /// Koordinat kampus ITB (sesuai backend MOCK_CAMPUS di attendances.ts)
+  static const double campusLatitude = -6.89147;
+  static const double campusLongitude = 107.61022;
   static const String campusName = 'ITB Ganesha';
 
-  /// Radius geofencing dalam meter
-  static const double geofenceRadiusMeters = 200.0;
+  /// Radius geofencing dalam meter (sesuai backend: 300m)
+  static const double geofenceRadiusMeters = 300.0;
 
   // ============================================================
   // Schedule Configuration
@@ -49,6 +52,14 @@ class AppConstants {
 
   /// Toleransi terlambat dalam menit
   static const int lateToleranceMinutes = 15;
+
+  // ============================================================
+  // Mock User ID (Phase 1 — backend belum verify Firebase token)
+  // ============================================================
+
+  /// Di Phase 1, backend pakai header X-Mock-User-Id untuk identifikasi user.
+  /// Ganti ini per user jika testing multiple users.
+  static const String mockUserId = 'mock_user_001';
 
   // ============================================================
   // SharedPreferences Keys (untuk cache profil saja)
@@ -69,6 +80,7 @@ class AppConstants {
   static const String errorSessionNotStarted = 'SESSION_NOT_STARTED';
   static const String errorTokenExpired = 'TOKEN_EXPIRED';
   static const String errorNotEnrolled = 'NOT_ENROLLED';
+  static const String errorInvalidPayload = 'INVALID_PAYLOAD';
 
   // ============================================================
   // App Info

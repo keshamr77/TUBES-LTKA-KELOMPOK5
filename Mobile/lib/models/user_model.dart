@@ -1,40 +1,35 @@
 /// Model data pengguna (mahasiswa)
-/// Menyimpan informasi identitas dari backend /api/users/me.
-/// Token TIDAK disimpan di model — dikelola oleh Firebase Auth.
+/// Phase 1: Data dari SharedPreferences (mock)
+/// Phase 2: Data dari GET /api/users/me
 class UserModel {
   final String id;
   final String name;
   final String nim;
   final String email;
-  final String role;
 
   const UserModel({
     required this.id,
     required this.name,
     required this.nim,
     required this.email,
-    this.role = 'student',
   });
 
-  /// Parsing dari JSON response GET /api/users/me
-  /// Format: { "success": true, "data": { "id", "name", "nim", "email", "role" } }
+  /// Parsing dari JSON response GET /api/users/me (Phase 2)
   factory UserModel.fromJson(Map<String, dynamic> json) {
     final data = json['data'] ?? json;
     return UserModel(
-      id: data['id']?.toString() ?? '',
+      id: data['userId']?.toString() ?? data['id']?.toString() ?? '',
       name: data['name']?.toString() ?? '',
       nim: data['nim']?.toString() ?? '',
       email: data['email']?.toString() ?? '',
-      role: data['role']?.toString() ?? 'student',
     );
   }
 
-  /// Konversi ke JSON untuk POST /api/users (setelah register)
+  /// Konversi ke JSON
   Map<String, dynamic> toJson() {
     return {
       'name': name,
       'nim': nim,
-      'role': role,
     };
   }
 
@@ -44,14 +39,12 @@ class UserModel {
     String? name,
     String? nim,
     String? email,
-    String? role,
   }) {
     return UserModel(
       id: id ?? this.id,
       name: name ?? this.name,
       nim: nim ?? this.nim,
       email: email ?? this.email,
-      role: role ?? this.role,
     );
   }
 
