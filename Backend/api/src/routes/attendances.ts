@@ -9,9 +9,9 @@ const router = Router();
  * Koordinat ini: Telkom University Bandung (sesuaikan dengan kampus kalian).
  */
 const MOCK_CAMPUS = {
-  latitude: -6.97285,
-  longitude: 107.63042,
-  radiusMeters: 100,
+  latitude: -6.89147,
+  longitude: 107.61022,
+  radiusMeters: 300,
 };
 
 /**
