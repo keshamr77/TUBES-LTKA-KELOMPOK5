@@ -6,7 +6,7 @@ const router = Router();
 /**
  * MOCK CAMPUS DATA
  * TODO Phase 2: Ganti dengan query Firestore ke collection courses/{courseId}.location
- * Koordinat ini: Telkom University Bandung (sesuaikan dengan kampus kalian).
+ * Koordinat ini: ITB.
  */
 const MOCK_CAMPUS = {
   latitude: -6.89147,
