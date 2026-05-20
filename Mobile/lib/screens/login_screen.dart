@@ -179,13 +179,16 @@ class _LoginScreenState extends State<LoginScreen>
                         children: [
                           CustomTextField(
                             controller: _emailController,
-                            label: 'Email atau NIM',
-                            hint: 'Masukkan email atau NIM',
-                            prefixIcon: Icons.person_outline,
+                            label: 'Email',
+                            hint: 'Masukkan email Anda',
+                            prefixIcon: Icons.email_outlined,
                             keyboardType: TextInputType.emailAddress,
                             validator: (value) {
                               if (value == null || value.isEmpty) {
-                                return 'Email atau NIM tidak boleh kosong';
+                                return 'Email tidak boleh kosong';
+                              }
+                              if (!value.contains('@')) {
+                                return 'Masukkan alamat email yang valid';
                               }
                               return null;
                             },
