@@ -1,6 +1,10 @@
 import { Router, Request, Response } from 'express';
+import { requireAuth } from '../middleware/auth';
 
 const router = Router();
+
+// Semua route di file ini membutuhkan autentikasi
+router.use(requireAuth);
 
 /**
  * GET /api/sessions/active

@@ -20,23 +20,35 @@ class SessionModel {
     required this.radiusMeters,
   });
 
-  /// Parsing dari item response API
+  /// Parsing dari item response API (V0.2 contract)
   factory SessionModel.fromJson(Map<String, dynamic> json) {
-    final course = json['course'] as Map<String, dynamic>?;
     final location = json['location'] as Map<String, dynamic>?;
+
+    DateTime startTime = DateTime.now();
+    DateTime endTime = DateTime.now();
+
+    if (json['tanggal'] != null) {
+      final dateStr = json['tanggal'].toString();
+      if (json['jamMulai'] != null) {
+        try {
+          startTime = DateTime.parse('$dateStr ${json['jamMulai']}');
+        } catch (_) {}
+      }
+      if (json['jamSelesai'] != null) {
+        try {
+          endTime = DateTime.parse('$dateStr ${json['jamSelesai']}');
+        } catch (_) {}
+      }
+    }
 
     return SessionModel(
       sessionId: json['sessionId']?.toString() ?? '',
-      courseName: course?['name']?.toString() ?? '',
-      startTime: json['startTime'] != null
-          ? DateTime.parse(json['startTime'].toString()).toLocal()
-          : DateTime.now(),
-      endTime: json['endTime'] != null
-          ? DateTime.parse(json['endTime'].toString()).toLocal()
-          : DateTime.now(),
+      courseName: json['namaKelas']?.toString() ?? '',
+      startTime: startTime,
+      endTime: endTime,
       latitude: (location?['latitude'] as num?)?.toDouble() ?? 0.0,
       longitude: (location?['longitude'] as num?)?.toDouble() ?? 0.0,
-      radiusMeters: (location?['radiusMeters'] as num?)?.toDouble() ?? 0.0,
+      radiusMeters: (location?['radius'] as num?)?.toDouble() ?? 0.0,
     );
   }
 

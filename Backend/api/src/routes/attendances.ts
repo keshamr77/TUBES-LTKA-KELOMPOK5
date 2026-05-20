@@ -1,7 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { isInRadius } from '../utils/haversine';
+import { requireAuth } from '../middleware/auth';
 
 const router = Router();
+
+// Semua route di file ini membutuhkan autentikasi
+router.use(requireAuth);
 
 /**
  * MOCK CAMPUS DATA
@@ -45,7 +49,7 @@ const mockAttendances: MockAttendance[] = [];
  */
 router.post('/', (req: Request, res: Response) => {
   const { sessionId, latitude, longitude, selfieUrl } = req.body;
-  const mockUserId = req.header('X-Mock-User-Id') || 'mock_user_001';
+  const userId = req.userId!;
 
   // === Validate payload ===
   if (
@@ -105,7 +109,7 @@ router.post('/', (req: Request, res: Response) => {
 
   // === Check duplicate (mock) ===
   const exists = mockAttendances.find(
-    (a) => a.sessionId === sessionId && a.userId === mockUserId,
+    (a) => a.sessionId === sessionId && a.userId === userId,
   );
   if (exists) {
     return res.status(409).json({
@@ -117,11 +121,10 @@ router.post('/', (req: Request, res: Response) => {
     });
   }
 
-  // === Save mock attendance ===
   const newAttendance: MockAttendance = {
     attendanceId: `att_${Date.now()}_${Math.random().toString(36).substring(7)}`,
     sessionId,
-    userId: mockUserId,
+    userId: userId,
     timestamp: new Date().toISOString(),
     distanceMeters,
     status: 'present',
@@ -154,14 +157,14 @@ router.post('/', (req: Request, res: Response) => {
  * - limit (optional, default 20, max 50)
  */
 router.get('/me', (req: Request, res: Response) => {
-  const mockUserId = req.header('X-Mock-User-Id') || 'mock_user_001';
+  const userId = req.userId!;
   const limit = Math.min(
     parseInt(req.query.limit as string, 10) || 20,
     50,
   );
 
   const userAttendances = mockAttendances
-    .filter((a) => a.userId === mockUserId)
+    .filter((a) => a.userId === userId)
     .slice(-limit)
     .reverse() // terbaru di atas
     .map((a) => ({

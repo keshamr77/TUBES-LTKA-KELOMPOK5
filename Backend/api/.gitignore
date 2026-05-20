@@ -24,3 +24,4 @@ Thumbs.db
 # Firebase service account (jangan pernah commit!)
 *-service-account.json
 firebase-adminsdk-*.json
+serviceAccountKey.json
