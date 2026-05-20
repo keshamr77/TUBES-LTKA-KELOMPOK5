@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:absensi_lokasi/config/constants.dart';
 import 'package:absensi_lokasi/config/theme.dart';
 import 'package:absensi_lokasi/models/user_model.dart';
+import 'package:absensi_lokasi/models/session_model.dart';
 import 'package:absensi_lokasi/services/auth_service.dart';
 import 'package:absensi_lokasi/services/location_service.dart';
 import 'package:absensi_lokasi/services/attendance_service.dart';
@@ -36,6 +37,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   String? _locationError;
   bool _hasCheckedInToday = false;
 
+  // Session State
+  bool _isLoadingSessions = true;
+  SessionModel? _activeSession;
+  String? _sessionsError;
+
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
 
@@ -54,6 +60,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
 
     _loadUser();
+    _fetchActiveSession();
     _initLocation();
   }
 
@@ -62,6 +69,37 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final user = await _authService.getCurrentUser();
     if (mounted) {
       setState(() => _user = user);
+    }
+  }
+
+  /// Ambil daftar sesi aktif dari backend
+  Future<void> _fetchActiveSession() async {
+    if (!mounted) return;
+    setState(() {
+      _isLoadingSessions = true;
+      _sessionsError = null;
+    });
+
+    final result = await _attendanceService.getActiveSessions();
+
+    if (!mounted) return;
+
+    setState(() {
+      _isLoadingSessions = false;
+      if (result.success) {
+        if (result.sessions.isNotEmpty) {
+          _activeSession = result.sessions.first;
+        } else {
+          _activeSession = null;
+        }
+      } else {
+        _sessionsError = result.message;
+      }
+    });
+
+    // Setelah mendapat sesi aktif, update perhitungan lokasi jika GPS sudah didapatkan
+    if (_latitude != null && _longitude != null) {
+      _recalculateLocationDetails(_latitude!, _longitude!);
     }
   }
 
@@ -110,29 +148,68 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   /// Update posisi dan hitung jarak
   void _updatePosition(Position position) {
-    final distance = _locationService.distanceToCampus(
-      position.latitude,
-      position.longitude,
-    );
-    final isWithin = _locationService.isWithinCampusRadius(
-      position.latitude,
-      position.longitude,
-    );
-
     setState(() {
       _latitude = position.latitude;
       _longitude = position.longitude;
-      _distance = distance;
-      _isWithinRadius = isWithin;
       _isLocationLoading = false;
       _locationError = null;
     });
+    _recalculateLocationDetails(position.latitude, position.longitude);
+  }
+
+  /// Recalculate distance and within radius status based on active session
+  void _recalculateLocationDetails(double lat, double lng) {
+    double? distance;
+    bool isWithin = false;
+
+    if (_activeSession != null) {
+      distance = _locationService.distanceTo(
+        lat,
+        lng,
+        _activeSession!.latitude,
+        _activeSession!.longitude,
+      );
+      isWithin = _locationService.isWithinRadius(
+        lat,
+        lng,
+        _activeSession!.radiusMeters,
+        centerLat: _activeSession!.latitude,
+        centerLng: _activeSession!.longitude,
+      );
+    } else {
+      // Fallback ke constants jika sesi tidak ada (atau belum dimuat)
+      distance = _locationService.distanceTo(
+        lat,
+        lng,
+        AppConstants.campusLatitude,
+        AppConstants.campusLongitude,
+      );
+      isWithin = _locationService.isWithinRadius(
+        lat,
+        lng,
+        AppConstants.geofenceRadiusMeters,
+        centerLat: AppConstants.campusLatitude,
+        centerLng: AppConstants.campusLongitude,
+      );
+    }
+
+    setState(() {
+      _distance = distance;
+      _isWithinRadius = isWithin;
+    });
+  }
+
+  /// Cek apakah waktu saat ini berada di dalam durasi sesi perkuliahan
+  bool _isWithinSessionTime(SessionModel session) {
+    final now = DateTime.now();
+    return now.isAfter(session.startTime) && now.isBefore(session.endTime);
   }
 
   /// Cek apakah tombol absen harus aktif
   bool get _canCheckIn {
+    if (_activeSession == null) return false;
     return _isWithinRadius &&
-        _locationService.isWithinClassSchedule() &&
+        _isWithinSessionTime(_activeSession!) &&
         !_isSubmitting &&
         !_hasCheckedInToday;
   }
@@ -141,12 +218,24 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Future<void> _handleCheckIn() async {
     if (_latitude == null || _longitude == null || _user == null) return;
 
+    if (_activeSession == null) {
+      _showWarningDialog(
+        'Tidak Ada Sesi',
+        'Tidak ada sesi absensi yang aktif saat ini.',
+        Icons.event_busy,
+        AppTheme.textHint,
+      );
+      return;
+    }
+
     // Cek lokasi dulu
     if (!_isWithinRadius) {
+      final radius = _activeSession!.radiusMeters;
+      final course = _activeSession!.courseName;
       _showWarningDialog(
         'Di Luar Area Kampus',
-        'Anda berada di luar radius ${AppConstants.geofenceRadiusMeters.toInt()} meter dari ${AppConstants.campusName}. '
-            'Silakan mendekat ke area kampus untuk melakukan absensi.',
+        'Anda berada di luar radius ${radius.toInt()} meter dari $course. '
+            'Silakan mendekat ke area lokasi kelas untuk melakukan absensi.',
         Icons.location_off,
         AppTheme.accentRed,
       );
@@ -154,23 +243,21 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     }
 
     // Cek jadwal
-    if (!_locationService.isWithinClassSchedule()) {
+    if (!_isWithinSessionTime(_activeSession!)) {
+      final timeStr = '${DateFormat('HH:mm').format(_activeSession!.startTime)} - ${DateFormat('HH:mm').format(_activeSession!.endTime)}';
       _showWarningDialog(
         'Di Luar Jadwal',
-        'Saat ini bukan waktu kelas. Absensi hanya dapat dilakukan pada '
-            'jam ${AppConstants.classStartHour.toString().padLeft(2, '0')}:${AppConstants.classStartMinute.toString().padLeft(2, '0')} - '
-            '${AppConstants.classEndHour.toString().padLeft(2, '0')}:${AppConstants.classEndMinute.toString().padLeft(2, '0')}.',
+        'Sesi absensi tidak aktif. Absensi hanya dapat dilakukan pada '
+            'durasi sesi yang ditentukan ($timeStr).',
         Icons.schedule,
-        AppTheme.accentAmber,
+        AppTheme.accentRed,
       );
       return;
     }
 
     setState(() => _isSubmitting = true);
 
-    // Phase 1: sessionId hardcoded (backend Phase 1 accepts any string)
-    // Phase 2: ambil dari GET /api/sessions/active
-    const sessionId = 'sess_mock_001';
+    final sessionId = _activeSession!.sessionId;
 
     final result = await _attendanceService.submitAttendance(
       sessionId: sessionId,
@@ -197,7 +284,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         String msg = result.message;
         if (result.distanceMeters != null) {
           msg += '\n\nJarak Anda: ${result.distanceMeters!.toStringAsFixed(1)} meter'
-              '\nRadius yang diizinkan: ${result.allowedRadius?.toStringAsFixed(0) ?? AppConstants.geofenceRadiusMeters.toStringAsFixed(0)} meter';
+              '\nRadius yang diizinkan: ${result.allowedRadius?.toStringAsFixed(0) ?? _activeSession!.radiusMeters.toStringAsFixed(0)} meter';
         }
         _showWarningDialog(errorTitle, msg, errorIcon, errorColor);
         return;
@@ -378,6 +465,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 _buildTimeCard(),
                 const SizedBox(height: 20),
 
+                // Sesi Aktif Info
+                _buildSessionCard(),
+                const SizedBox(height: 20),
+
                 // Kartu status lokasi
                 LocationStatusCard(
                   latitude: _latitude,
@@ -385,6 +476,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   distance: _distance,
                   isWithinRadius: _isWithinRadius,
                   isLoading: _isLocationLoading,
+                  radiusMeters: _activeSession?.radiusMeters ?? AppConstants.geofenceRadiusMeters,
                 ),
                 const SizedBox(height: 16),
 
@@ -493,12 +585,180 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
+  /// Kartu Sesi Aktif
+  Widget _buildSessionCard() {
+    if (_isLoadingSessions) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: AppTheme.cardDark,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: const Center(
+          child: CircularProgressIndicator(color: AppTheme.accentGreen),
+        ),
+      );
+    }
+
+    if (_sessionsError != null) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: AppTheme.accentRed.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppTheme.accentRed.withOpacity(0.3)),
+        ),
+        child: Column(
+          children: [
+            const Icon(Icons.error_outline, color: AppTheme.accentRed, size: 30),
+            const SizedBox(height: 8),
+            Text(
+              'Gagal memuat sesi: $_sessionsError',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              onPressed: _fetchActiveSession,
+              icon: const Icon(Icons.refresh, size: 16),
+              label: const Text('Coba Lagi'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.accentRed,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_activeSession == null) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: AppTheme.cardDark,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppTheme.textHint.withOpacity(0.2)),
+        ),
+        child: Column(
+          children: [
+            const Icon(Icons.event_busy, color: AppTheme.textHint, size: 36),
+            const SizedBox(height: 10),
+            const Text(
+              'Tidak ada sesi absensi yang sedang buka',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Hubungi dosen pengampu jika sesi belum dimulai.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: AppTheme.textHint,
+                fontSize: 12,
+              ),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _fetchActiveSession,
+              icon: const Icon(Icons.sync, size: 16, color: AppTheme.textSecondary),
+              label: const Text('Segarkan', style: TextStyle(color: AppTheme.textSecondary)),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: AppTheme.textHint),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final session = _activeSession!;
+    final timeRangeStr =
+        '${DateFormat('HH:mm').format(session.startTime)} - ${DateFormat('HH:mm').format(session.endTime)}';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppTheme.cardDark,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.accentGreen.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppTheme.accentGreen.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  'SESI AKTIF',
+                  style: TextStyle(
+                    color: AppTheme.accentGreen,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              const Spacer(),
+              Text(
+                timeRangeStr,
+                style: const TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            session.courseName,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Icon(Icons.location_on, color: AppTheme.textSecondary, size: 14),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  'Lokasi Kelas: ${session.latitude.toStringAsFixed(5)}, ${session.longitude.toStringAsFixed(5)}',
+                  style: const TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Kartu waktu saat ini
   Widget _buildTimeCard() {
     final now = DateTime.now();
     final timeStr = DateFormat('HH:mm').format(now);
     final dateStr = DateFormat('EEEE, d MMMM yyyy', 'id_ID').format(now);
-    final isInSchedule = _locationService.isWithinClassSchedule();
+    final isInSession = _activeSession != null && _isWithinSessionTime(_activeSession!);
 
     return Container(
       width: double.infinity,
@@ -547,14 +807,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: (isInSchedule ? AppTheme.accentGreen : AppTheme.textHint)
+              color: (isInSession ? AppTheme.accentGreen : AppTheme.textHint)
                   .withOpacity(0.15),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
-              isInSchedule ? 'Jam Kuliah' : 'Di Luar Jam',
+              isInSession ? 'Sesi Dibuka' : 'Sesi Ditutup',
               style: TextStyle(
-                color: isInSchedule ? AppTheme.accentGreen : AppTheme.textHint,
+                color: isInSession ? AppTheme.accentGreen : AppTheme.textHint,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),
@@ -626,17 +886,26 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     : AppTheme.cardLighter,
             onPressed: _canCheckIn ? _handleCheckIn : () {
               // Tampilkan alasan tidak bisa absen
-              if (!_isWithinRadius && !_isLocationLoading) {
+              if (_activeSession == null) {
                 _showWarningDialog(
-                  'Di Luar Area Kampus',
-                  'Anda berada di luar radius ${AppConstants.geofenceRadiusMeters.toInt()} meter dari ${AppConstants.campusName}.',
+                  'Tidak Ada Sesi',
+                  'Tidak ada sesi absensi yang aktif saat ini.',
+                  Icons.event_busy,
+                  AppTheme.textHint,
+                );
+              } else if (!_isWithinRadius && !_isLocationLoading) {
+                final radius = _activeSession!.radiusMeters;
+                final course = _activeSession!.courseName;
+                _showWarningDialog(
+                  'Di Luar Radius Kelas',
+                  'Anda berada di luar radius ${radius.toInt()} meter dari lokasi kelas $course.',
                   Icons.location_off,
                   AppTheme.accentRed,
                 );
-              } else if (!_locationService.isWithinClassSchedule()) {
+              } else if (!_isWithinSessionTime(_activeSession!)) {
                 _showWarningDialog(
-                  'Di Luar Jadwal',
-                  'Saat ini bukan waktu kelas.',
+                  'Di Luar Jadwal Sesi',
+                  'Sesi perkuliahan sedang tidak berlangsung atau sudah berakhir.',
                   Icons.schedule,
                   AppTheme.accentAmber,
                 );

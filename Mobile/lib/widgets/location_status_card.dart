@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:absensi_lokasi/config/theme.dart';
+import 'package:absensi_lokasi/config/constants.dart';
 
 /// Widget kartu status lokasi yang menampilkan informasi GPS.
 /// Digunakan di Home Screen untuk menunjukkan status radius.
@@ -9,6 +10,7 @@ class LocationStatusCard extends StatelessWidget {
   final double? distance;
   final bool isWithinRadius;
   final bool isLoading;
+  final double radiusMeters;
 
   const LocationStatusCard({
     super.key,
@@ -17,6 +19,7 @@ class LocationStatusCard extends StatelessWidget {
     this.distance,
     required this.isWithinRadius,
     this.isLoading = false,
+    this.radiusMeters = AppConstants.geofenceRadiusMeters,
   });
 
   @override
@@ -126,7 +129,7 @@ class LocationStatusCard extends StatelessWidget {
         _buildInfoRow(
           Icons.radar,
           'Radius',
-          '200 meter',
+          '${radiusMeters.toStringAsFixed(0)} meter',
         ),
       ],
     );

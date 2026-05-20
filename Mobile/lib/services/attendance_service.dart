@@ -1,5 +1,6 @@
 import 'package:absensi_lokasi/config/constants.dart';
 import 'package:absensi_lokasi/models/attendance_model.dart';
+import 'package:absensi_lokasi/models/session_model.dart';
 import 'package:absensi_lokasi/services/api_service.dart';
 
 /// Service untuk operasi absensi.
@@ -12,6 +13,42 @@ class AttendanceService {
   AttendanceService._internal();
 
   final ApiService _api = ApiService();
+
+  // ============================================================
+  // Get Sesi Aktif
+  // ============================================================
+
+  /// Ambil daftar sesi absensi yang sedang aktif
+  /// GET /api/sessions/active
+  Future<ActiveSessionsResult> getActiveSessions() async {
+    final response = await _api.get(AppConstants.activeSessionsEndpoint);
+
+    if (response.success && response.data != null) {
+      try {
+        final List<dynamic> records = response.data!['data'] ?? [];
+        final sessions =
+            records.map((json) => SessionModel.fromJson(json)).toList();
+
+        return ActiveSessionsResult(
+          success: true,
+          message: 'Berhasil memuat sesi aktif',
+          sessions: sessions,
+        );
+      } catch (e) {
+        return ActiveSessionsResult(
+          success: false,
+          message: 'Gagal memproses data sesi aktif: ${e.toString()}',
+          sessions: [],
+        );
+      }
+    }
+
+    return ActiveSessionsResult(
+      success: false,
+      message: response.message,
+      sessions: [],
+    );
+  }
 
   // ============================================================
   // Submit Absensi
@@ -191,5 +228,18 @@ class AttendanceHistoryResult {
     required this.success,
     required this.message,
     required this.attendances,
+  });
+}
+
+/// Model hasil pembacaan sesi aktif
+class ActiveSessionsResult {
+  final bool success;
+  final String message;
+  final List<SessionModel> sessions;
+
+  const ActiveSessionsResult({
+    required this.success,
+    required this.message,
+    required this.sessions,
   });
 }

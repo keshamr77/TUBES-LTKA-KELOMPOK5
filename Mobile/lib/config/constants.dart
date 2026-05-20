@@ -18,12 +18,12 @@ class AppConstants {
   // --- Endpoints yang SUDAH ada di backend Phase 1 ---
   static const String attendancesEndpoint = '/attendances';     // POST: submit absensi
   static const String myAttendancesEndpoint = '/attendances/me'; // GET: riwayat absensi
+  static const String activeSessionsEndpoint = '/sessions/active'; // GET: sesi aktif
 
   // --- Endpoints yang BELUM ada di backend (akan Phase 2) ---
   // static const String createUserEndpoint = '/users';
   // static const String getUserMeEndpoint = '/users/me';
   // static const String coursesEndpoint = '/courses';
-  // static const String activeSessionsEndpoint = '/sessions/active';
 
   // ============================================================
   // GPS / Geofencing Configuration

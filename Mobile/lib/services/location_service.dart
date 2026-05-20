@@ -138,20 +138,23 @@ class LocationService {
     return degrees * pi / 180;
   }
 
-  /// Menghitung jarak dari posisi saat ini ke kampus
-  double distanceToCampus(double latitude, double longitude) {
-    return calculateDistance(
-      latitude,
-      longitude,
-      AppConstants.campusLatitude,
-      AppConstants.campusLongitude,
-    );
+  /// Menghitung jarak dari posisi saat ini ke koordinat target
+  double distanceTo(double lat, double lng, double targetLat, double targetLng) {
+    return calculateDistance(lat, lng, targetLat, targetLng);
   }
 
-  /// Cek apakah posisi berada dalam radius kampus
-  bool isWithinCampusRadius(double latitude, double longitude) {
-    final distance = distanceToCampus(latitude, longitude);
-    return distance <= AppConstants.geofenceRadiusMeters;
+  /// Cek apakah posisi berada dalam radius tertentu dari koordinat target
+  bool isWithinRadius(
+    double lat,
+    double lng,
+    double radiusMeters, {
+    double? centerLat,
+    double? centerLng,
+  }) {
+    final targetLat = centerLat ?? AppConstants.campusLatitude;
+    final targetLng = centerLng ?? AppConstants.campusLongitude;
+    final distance = calculateDistance(lat, lng, targetLat, targetLng);
+    return distance <= radiusMeters;
   }
 
   // ============================================================
