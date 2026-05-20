@@ -1,184 +1,229 @@
 import { Router, Request, Response } from 'express';
+import admin from 'firebase-admin';
+import { db } from '../config/firebase';
 import { isInRadius } from '../utils/haversine';
+import { isWithinSessionTime } from '../utils/time';
 
 const router = Router();
-
-/**
- * MOCK CAMPUS DATA
- * TODO Phase 2: Ganti dengan query Firestore ke collection courses/{courseId}.location
- * Koordinat ini: ITB.
- */
-const MOCK_CAMPUS = {
-  latitude: -6.89147,
-  longitude: 107.61022,
-  radiusMeters: 300,
-};
-
-/**
- * MOCK ATTENDANCE STORE
- * In-memory storage. Data akan hilang saat server restart.
- * TODO Phase 2: Ganti dengan write ke Firestore collection attendances.
- */
-interface MockAttendance {
-  attendanceId: string;
-  sessionId: string;
-  userId: string;
-  timestamp: string;
-  distanceMeters: number;
-  status: string;
-  selfieUrl: string;
-}
-
-const mockAttendances: MockAttendance[] = [];
+const ATTENDANCES = 'attendances';
+const SESSIONS = 'sessions';
 
 /**
  * POST /api/attendances
- * Submit absensi dengan validasi Haversine.
+ * Submit absensi dengan validasi geofencing (Haversine) + validasi waktu sesi.
  *
- * Phase 1 Behavior:
- * - Belum verify Firebase ID token (Phase 2)
- * - User ID dari header 'X-Mock-User-Id' (default: 'mock_user_001')
- * - Course location pakai MOCK_CAMPUS hardcoded
- * - Data disimpan in-memory (hilang saat restart)
+ * Phase 2 Behavior:
+ * - Koordinat kampus & radius diambil dari dokumen SESI (bukan hardcode)
+ * - Validasi: sesi ada? status open? dalam rentang waktu? dalam radius? belum absen?
+ * - Disimpan ke Firestore collection 'attendances'
+ * - User ID sementara dari header 'X-Mock-User-Id' (Phase 3: dari Firebase Auth token)
  *
- * Format request & response: sesuai API_CONTRACT.md
+ * Body: { sessionId, latitude, longitude, selfieUrl }
  */
-router.post('/', (req: Request, res: Response) => {
-  const { sessionId, latitude, longitude, selfieUrl } = req.body;
-  const mockUserId = req.header('X-Mock-User-Id') || 'mock_user_001';
+router.post('/', async (req: Request, res: Response) => {
+  try {
+    const { sessionId, latitude, longitude, selfieUrl } = req.body;
+    const userId = req.header('X-Mock-User-Id') || 'mock_user_001';
 
-  // === Validate payload ===
-  if (
-    !sessionId ||
-    typeof latitude !== 'number' ||
-    typeof longitude !== 'number' ||
-    !selfieUrl
-  ) {
-    return res.status(400).json({
-      success: false,
-      error: {
-        code: 'INVALID_PAYLOAD',
-        message:
-          'sessionId (string), latitude (number), longitude (number), dan selfieUrl (string) wajib diisi',
-      },
-    });
-  }
-
-  // === Validate coordinate range (-90..90 dan -180..180) ===
-  if (
-    latitude < -90 ||
-    latitude > 90 ||
-    longitude < -180 ||
-    longitude > 180
-  ) {
-    return res.status(400).json({
-      success: false,
-      error: {
-        code: 'INVALID_PAYLOAD',
-        message: 'Koordinat GPS tidak valid',
-      },
-    });
-  }
-
-  // === Haversine validation ===
-  const { inRadius, distanceMeters } = isInRadius(
-    latitude,
-    longitude,
-    MOCK_CAMPUS.latitude,
-    MOCK_CAMPUS.longitude,
-    MOCK_CAMPUS.radiusMeters,
-  );
-
-  if (!inRadius) {
-    return res.status(403).json({
-      success: false,
-      error: {
-        code: 'OUT_OF_RADIUS',
-        message: 'Anda berada di luar radius kampus',
-        details: {
-          distanceMeters,
-          allowedRadiusMeters: MOCK_CAMPUS.radiusMeters,
+    // === Validate payload ===
+    if (
+      !sessionId ||
+      typeof latitude !== 'number' ||
+      typeof longitude !== 'number' ||
+      !selfieUrl
+    ) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_PAYLOAD',
+          message:
+            'sessionId (string), latitude (number), longitude (number), selfieUrl (string) wajib diisi',
         },
-      },
-    });
-  }
+      });
+    }
 
-  // === Check duplicate (mock) ===
-  const exists = mockAttendances.find(
-    (a) => a.sessionId === sessionId && a.userId === mockUserId,
-  );
-  if (exists) {
-    return res.status(409).json({
-      success: false,
-      error: {
-        code: 'ALREADY_SUBMITTED',
-        message: 'Anda sudah absen di sesi ini',
-      },
-    });
-  }
+    if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_PAYLOAD', message: 'Koordinat GPS tidak valid' },
+      });
+    }
 
-  // === Save mock attendance ===
-  const newAttendance: MockAttendance = {
-    attendanceId: `att_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-    sessionId,
-    userId: mockUserId,
-    timestamp: new Date().toISOString(),
-    distanceMeters,
-    status: 'present',
-    selfieUrl,
-  };
-  mockAttendances.push(newAttendance);
+    // === Ambil dokumen sesi ===
+    const sessionDoc = await db.collection(SESSIONS).doc(sessionId).get();
+    if (!sessionDoc.exists) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Sesi tidak ditemukan' },
+      });
+    }
+    const session = sessionDoc.data() as Record<string, any>;
 
-  return res.status(201).json({
-    success: true,
-    data: {
-      attendanceId: newAttendance.attendanceId,
-      sessionId: newAttendance.sessionId,
+    // === Validasi status sesi ===
+    if (session.status !== 'open') {
+      return res.status(410).json({
+        success: false,
+        error: { code: 'SESSION_CLOSED', message: 'Sesi sudah ditutup' },
+      });
+    }
+
+    // === Validasi waktu sesi (soft auto-close) ===
+    const timeStatus = isWithinSessionTime(
+      session.tanggal,
+      session.jamMulai,
+      session.jamSelesai,
+    );
+    if (!timeStatus.isActive) {
+      const code =
+        timeStatus.reason === 'not_started'
+          ? 'SESSION_NOT_STARTED'
+          : 'SESSION_CLOSED';
+      const message =
+        timeStatus.reason === 'not_started'
+          ? 'Sesi belum dimulai'
+          : 'Waktu sesi sudah berakhir';
+      return res.status(410).json({
+        success: false,
+        error: { code, message },
+      });
+    }
+
+    // === Validasi geofencing (Haversine) pakai koordinat SESI ===
+    if (
+      typeof session.latitude !== 'number' ||
+      typeof session.longitude !== 'number' ||
+      typeof session.radius !== 'number'
+    ) {
+      return res.status(500).json({
+        success: false,
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Data lokasi sesi tidak lengkap',
+        },
+      });
+    }
+
+    const { inRadius, distanceMeters } = isInRadius(
+      latitude,
+      longitude,
+      session.latitude,
+      session.longitude,
+      session.radius,
+    );
+
+    if (!inRadius) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'OUT_OF_RADIUS',
+          message: 'Anda berada di luar radius kampus',
+          details: {
+            distanceMeters,
+            allowedRadiusMeters: session.radius,
+          },
+        },
+      });
+    }
+
+    // === Cek duplikat (sudah absen di sesi ini?) ===
+    const existing = await db
+      .collection(ATTENDANCES)
+      .where('sessionId', '==', sessionId)
+      .where('userId', '==', userId)
+      .limit(1)
+      .get();
+
+    if (!existing.empty) {
+      return res.status(409).json({
+        success: false,
+        error: { code: 'ALREADY_SUBMITTED', message: 'Anda sudah absen di sesi ini' },
+      });
+    }
+
+    // === Simpan absensi ke Firestore ===
+    const newAttendance = {
+      sessionId,
+      userId,
+      namaKelas: session.namaKelas ?? null,
+      kodeKelas: session.kodeKelas ?? null,
+      latitude,
+      longitude,
       distanceMeters,
+      selfieUrl,
       status: 'present',
-      timestamp: newAttendance.timestamp,
-    },
-  });
+      timestamp: new Date(),
+    };
+
+    const docRef = await db.collection(ATTENDANCES).add(newAttendance);
+
+    return res.status(201).json({
+      success: true,
+      data: {
+        attendanceId: docRef.id,
+        sessionId,
+        distanceMeters,
+        status: 'present',
+        timestamp: newAttendance.timestamp.toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error('[POST /attendances]', error);
+    return res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Gagal submit absensi' },
+    });
+  }
 });
 
 /**
  * GET /api/attendances/me
  * Riwayat absensi user yang lagi login.
  *
- * Phase 1 Behavior:
- * - Belum verify Firebase ID token (Phase 2)
- * - User ID dari header 'X-Mock-User-Id'
- * - Course name di-mock
- *
- * Query params:
- * - limit (optional, default 20, max 50)
+ * Query: ?limit=20 (max 50)
+ * User ID sementara dari header 'X-Mock-User-Id'.
  */
-router.get('/me', (req: Request, res: Response) => {
-  const mockUserId = req.header('X-Mock-User-Id') || 'mock_user_001';
-  const limit = Math.min(
-    parseInt(req.query.limit as string, 10) || 20,
-    50,
-  );
+router.get('/me', async (req: Request, res: Response) => {
+  try {
+    const userId = req.header('X-Mock-User-Id') || 'mock_user_001';
+    const limit = Math.min(parseInt(req.query.limit as string, 10) || 20, 50);
 
-  const userAttendances = mockAttendances
-    .filter((a) => a.userId === mockUserId)
-    .slice(-limit)
-    .reverse() // terbaru di atas
-    .map((a) => ({
-      attendanceId: a.attendanceId,
-      session: {
-        id: a.sessionId,
-        courseName: 'Mock Course (Phase 1)', // TODO Phase 2: query Firestore
-      },
-      timestamp: a.timestamp,
-      status: a.status,
-      distanceMeters: a.distanceMeters,
-    }));
+    const snapshot = await db
+      .collection(ATTENDANCES)
+      .where('userId', '==', userId)
+      .get();
 
-  return res.json({
-    success: true,
-    data: userAttendances,
-  });
+    // Sort by timestamp desc di sisi server (hindari butuh composite index)
+    const attendances = snapshot.docs
+      .map((doc: admin.firestore.QueryDocumentSnapshot) => {
+        const a = doc.data() as Record<string, any>;
+        const ts =
+          a.timestamp?.toDate?.() instanceof Date
+            ? a.timestamp.toDate()
+            : new Date(a.timestamp);
+        return {
+          attendanceId: doc.id,
+          session: {
+            id: a.sessionId,
+            courseName: a.namaKelas ?? 'Unknown',
+          },
+          timestamp: ts.toISOString(),
+          status: a.status,
+          distanceMeters: a.distanceMeters,
+          _sortTs: ts.getTime(),
+        };
+      })
+      .sort((x, y) => y._sortTs - x._sortTs)
+      .slice(0, limit)
+      .map(({ _sortTs, ...rest }) => rest);
+
+    return res.json({ success: true, data: attendances });
+  } catch (error) {
+    console.error('[GET /attendances/me]', error);
+    return res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Gagal memuat riwayat absensi' },
+    });
+  }
 });
 
 export default router;
