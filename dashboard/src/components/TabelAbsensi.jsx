@@ -15,8 +15,8 @@ export default function TabelAbsensi() {
     return () => unsub();
   }, []);
 
-  if (loading) return <p style={{color:'#666', fontSize:'14px'}}>Memuat data...</p>;
-  if (data.length === 0) return <p style={{color:'#666', fontSize:'14px'}}>Belum ada data absensi.</p>;
+  if (loading) return <p style={{ color: '#666', fontSize: '14px' }}>Memuat data...</p>;
+  if (data.length === 0) return <p style={{ color: '#666', fontSize: '14px' }}>Belum ada data absensi.</p>;
 
   return (
     <div style={styles.card}>
@@ -43,7 +43,9 @@ export default function TabelAbsensi() {
                   {row.status || '-'}
                 </span>
               </td>
-              <td style={styles.td}>{row.latitude && row.longitude ? `${row.latitude}, ${row.longitude}` : '-'}</td>
+              <td style={styles.td}>
+                {row.posisi ? `${row.posisi.latitude}, ${row.posisi.longitude}` : row.latitude && row.longitude ? `${row.latitude}, ${row.longitude}` : '-'}
+              </td>
             </tr>
           ))}
         </tbody>

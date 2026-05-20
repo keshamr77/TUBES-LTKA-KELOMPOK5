@@ -8,7 +8,9 @@ const firebaseConfig = {
   projectId: "tugas-besar-ltka-a29d4",
   storageBucket: "tugas-besar-ltka-a29d4.firebasestorage.app",
   messagingSenderId: "1045005913293",
-  appId: "1:1045005913293:web:d053c9008f20f86b7aad84"
+  appId: "1:1045005913293:web:d053c9008f20f86b7aad84",
+  measurementId: "G-F87T8XB5MH",
+
 };
 
 const app = initializeApp(firebaseConfig);
