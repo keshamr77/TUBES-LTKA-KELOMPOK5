@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:absensi_lokasi/config/constants.dart';
 import 'package:absensi_lokasi/models/user_model.dart';
+import 'package:absensi_lokasi/services/api_service.dart';
 
 /// Service untuk autentikasi pengguna menggunakan Firebase Auth.
 ///
@@ -44,10 +46,27 @@ class AuthService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(AppConstants.prefUserEmail, cred.user!.email ?? email);
 
+      // Coba sync profile terbaru dari API saat login sukses
+      String name = cred.user!.displayName ?? email.split('@').first;
+      String nim = '';
+      
+      try {
+        final response = await ApiService().get(AppConstants.getUserMeEndpoint);
+        if (response.success && response.data != null) {
+          final updatedUser = UserModel.fromJson(response.data!);
+          name = updatedUser.name;
+          nim = updatedUser.nim;
+          await prefs.setString(AppConstants.prefUserName, name);
+          await prefs.setString(AppConstants.prefUserNim, nim);
+        }
+      } catch (e) {
+        debugPrint('Gagal mengambil data user saat login: $e');
+      }
+
       final user = UserModel(
         id: cred.user!.uid,
-        name: prefs.getString(AppConstants.prefUserName) ?? cred.user!.displayName ?? email.split('@').first,
-        nim: prefs.getString(AppConstants.prefUserNim) ?? '',
+        name: prefs.getString(AppConstants.prefUserName) ?? name,
+        nim: prefs.getString(AppConstants.prefUserNim) ?? nim,
         email: cred.user!.email ?? email,
       );
 
@@ -138,12 +157,29 @@ class AuthService {
   // User Profile
   // ============================================================
 
-  /// Ambil data user dari Firebase Auth + SharedPreferences
+  /// Ambil data user dari Firebase Auth + SharedPreferences, dan sync dari Backend API jika online
   Future<UserModel?> getCurrentUser() async {
     final firebaseUser = _firebaseAuth.currentUser;
     if (firebaseUser == null) return null;
 
     final prefs = await SharedPreferences.getInstance();
+
+    // Coba ambil profile terbaru dari API
+    try {
+      final response = await ApiService().get(AppConstants.getUserMeEndpoint);
+      if (response.success && response.data != null) {
+        final updatedUser = UserModel.fromJson(response.data!);
+        
+        // Simpan data terupdate ke SharedPreferences
+        await prefs.setString(AppConstants.prefUserName, updatedUser.name);
+        await prefs.setString(AppConstants.prefUserNim, updatedUser.nim);
+        
+        return updatedUser;
+      }
+    } catch (e) {
+      // Abaikan error jaringan/API, lanjut ke fallback SharedPreferences
+      debugPrint('Gagal sinkronisasi data user dari API: $e');
+    }
 
     return UserModel(
       id: firebaseUser.uid,

@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import healthRouter from './routes/health';
 import attendancesRouter from './routes/attendances';
 import sessionsRouter from './routes/sessions';
+import usersRouter from './routes/users';
 
 dotenv.config();
 
@@ -25,7 +26,7 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
 app.use('/health', healthRouter);
 app.use('/api/sessions', sessionsRouter);
 app.use('/api/attendances', attendancesRouter);
-app.use('/api/sessions', sessionsRouter);
+app.use('/api/users', usersRouter);
 
 // === Root endpoint ===
 app.get('/', (_req: Request, res: Response) => {
