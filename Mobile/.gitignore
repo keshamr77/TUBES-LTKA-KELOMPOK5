@@ -43,3 +43,8 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Firebase configuration (berisi API Key — jangan commit ke repo publik!)
+android/app/google-services.json
+lib/firebase_options.dart
+
