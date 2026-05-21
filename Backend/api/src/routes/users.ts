@@ -45,14 +45,20 @@ router.get('/me', async (req: Request, res: Response) => {
 
     const userData = userDoc.data() as Record<string, any>;
 
+    // Normalisasi key dari Firestore untuk menghindari trailing/leading space (seperti "email ")
+    const normalizedData: Record<string, any> = {};
+    for (const key of Object.keys(userData)) {
+      normalizedData[key.trim()] = userData[key];
+    }
+
     return res.json({
       success: true,
       data: {
         userId: userDoc.id,
-        name: userData.nama ?? userData.name ?? '',
-        nim: userData.nim ?? '',
-        email: userData.email ?? req.userEmail ?? '',
-        role: userData.role ?? 'mahasiswa',
+        name: normalizedData.nama ?? normalizedData.name ?? '',
+        nim: normalizedData.nim ?? '',
+        email: normalizedData.email ?? req.userEmail ?? '',
+        role: normalizedData.role ?? 'mahasiswa',
       },
     });
   } catch (error) {

@@ -58,6 +58,9 @@ class AuthService {
           nim = updatedUser.nim;
           await prefs.setString(AppConstants.prefUserName, name);
           await prefs.setString(AppConstants.prefUserNim, nim);
+          if (updatedUser.email.isNotEmpty) {
+            await prefs.setString(AppConstants.prefUserEmail, updatedUser.email);
+          }
         }
       } catch (e) {
         debugPrint('Gagal mengambil data user saat login: $e');
@@ -173,6 +176,9 @@ class AuthService {
         // Simpan data terupdate ke SharedPreferences
         await prefs.setString(AppConstants.prefUserName, updatedUser.name);
         await prefs.setString(AppConstants.prefUserNim, updatedUser.nim);
+        if (updatedUser.email.isNotEmpty) {
+          await prefs.setString(AppConstants.prefUserEmail, updatedUser.email);
+        }
         
         return updatedUser;
       }
@@ -188,7 +194,7 @@ class AuthService {
           firebaseUser.email?.split('@').first ??
           '',
       nim: prefs.getString(AppConstants.prefUserNim) ?? '',
-      email: firebaseUser.email ?? '',
+      email: prefs.getString(AppConstants.prefUserEmail) ?? firebaseUser.email ?? '',
     );
   }
 
