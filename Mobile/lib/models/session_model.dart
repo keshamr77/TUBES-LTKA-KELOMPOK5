@@ -4,6 +4,8 @@
 class SessionModel {
   final String sessionId;
   final String courseName;
+  final String kodeKelas;
+  final String namaKelas;
   final DateTime startTime;
   final DateTime endTime;
   final double latitude;
@@ -13,6 +15,8 @@ class SessionModel {
   const SessionModel({
     required this.sessionId,
     required this.courseName,
+    required this.kodeKelas,
+    required this.namaKelas,
     required this.startTime,
     required this.endTime,
     required this.latitude,
@@ -21,7 +25,7 @@ class SessionModel {
   });
 
   /// Parsing dari item response API
-  /// Backend v0.2 format: namaKelas, tanggal, jamMulai, jamSelesai, location.radius
+  /// Backend v0.2 format: namaKelas, kodeKelas, tanggal, jamMulai, jamSelesai, location.radius
   factory SessionModel.fromJson(Map<String, dynamic> json) {
     final location = json['location'] as Map<String, dynamic>?;
 
@@ -39,9 +43,24 @@ class SessionModel {
       endTime = DateTime.parse('$tanggal ${jamSelesai.padRight(5, "0")}:00');
     }
 
+    final kodeKelas = json['kodeKelas']?.toString() ?? '';
+    final namaKelas = json['namaKelas']?.toString() ?? '';
+
+    // Gabungkan kode kelas dan nama kelas agar informatif (misal: "ET 3302 - JAN")
+    String courseName = '';
+    if (kodeKelas.isNotEmpty && namaKelas.isNotEmpty) {
+      courseName = '$kodeKelas - $namaKelas';
+    } else if (kodeKelas.isNotEmpty) {
+      courseName = kodeKelas;
+    } else {
+      courseName = namaKelas;
+    }
+
     return SessionModel(
       sessionId: json['sessionId']?.toString() ?? '',
-      courseName: json['namaKelas']?.toString() ?? '',
+      courseName: courseName,
+      kodeKelas: kodeKelas,
+      namaKelas: namaKelas,
       startTime: startTime,
       endTime: endTime,
       latitude: (location?['latitude'] as num?)?.toDouble() ?? 0.0,
