@@ -39,7 +39,7 @@ export default function KelolaSesi() {
 
       // Auto close sesi yang sudah lewat jam selesai
       data.forEach(async (sesi) => {
-        if (sesi.status === 'active' && sesi.tanggal && sesi.jamSelesai) {
+        if (sesi.status === 'open' && sesi.tanggal && sesi.jamSelesai) {
           const selesai = new Date(`${sesi.tanggal}T${sesi.jamSelesai}:00`);
           if (now > selesai) {
             await updateDoc(doc(db, 'sessions', sesi.id), { status: 'closed' });
@@ -69,7 +69,7 @@ export default function KelolaSesi() {
         radius: parseInt(form.radius),
         latitude: KAMPUS_ITB.lat,
         longitude: KAMPUS_ITB.lng,
-        status: 'active',
+        status: 'open',
         dosenEmail: auth.currentUser?.email,
         createdAt: serverTimestamp(),
       });
@@ -119,7 +119,7 @@ export default function KelolaSesi() {
   };
 
   const statusStyle = (status) => ({
-    active: { bg: '#e8f5e9', color: '#2e7d32', label: '🟢 Aktif' },
+    open: { bg: '#e8f5e9', color: '#2e7d32', label: '🟢 Terbuka' },
     closed: { bg: '#ffebee', color: '#c62828', label: '🔴 Ditutup' },
   }[status] || { bg: '#f5f5f5', color: '#666', label: status });
 
@@ -261,7 +261,7 @@ export default function KelolaSesi() {
                   >
                     ⬇ Export CSV
                   </button>
-                  {sesi.status === 'active' && (
+                  {sesi.status === 'open' && (
                     <button
                       onClick={() => setModal({ type: 'tutup', sesiId: sesi.id, sesiNama: sesi.namaKelas })}
                       style={{ flex: 1, padding: '7px', borderRadius: '8px', border: '1px solid #f5c2c2', background: 'transparent', fontSize: '12px', cursor: 'pointer', color: '#c62828' }}
