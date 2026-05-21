@@ -22,6 +22,7 @@ Thumbs.db
 .idea/
 
 # Firebase service account (jangan pernah commit!)
+serviceAccountKey.json
 *-service-account.json
 firebase-adminsdk-*.json
 serviceAccountKey.json

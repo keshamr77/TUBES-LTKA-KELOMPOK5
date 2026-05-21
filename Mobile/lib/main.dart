@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:absensi_lokasi/firebase_options.dart';
 import 'package:absensi_lokasi/config/theme.dart';
 import 'package:absensi_lokasi/screens/splash_screen.dart';
 
 /// Entry point aplikasi Sistem Absensi Berbasis Lokasi.
-/// Phase 1: Tanpa Firebase. Phase 2: Tambahkan Firebase.initializeApp().
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Phase 2: Uncomment ini setelah setup Firebase
-  // await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  // Inisialisasi Firebase
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   // Inisialisasi format tanggal Bahasa Indonesia
   await initializeDateFormatting('id_ID', null);

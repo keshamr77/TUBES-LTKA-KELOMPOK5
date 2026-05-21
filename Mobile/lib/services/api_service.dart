@@ -1,18 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:absensi_lokasi/config/constants.dart';
 
 /// Service untuk komunikasi dengan backend REST API.
 ///
-/// Phase 1 (mock mode):
-///   - Backend BELUM verify Firebase token
-///   - Identifikasi user via header X-Mock-User-Id
-///   - Hanya 2 endpoint: POST /api/attendances, GET /api/attendances/me
-///
-/// Phase 2 (production):
-///   - Ganti _getHeaders() untuk pakai Firebase Auth token
-///   - Hapus X-Mock-User-Id header
+/// Autentikasi via Firebase Auth ID Token (Bearer).
+/// Juga mengirim X-Mock-User-Id sebagai fallback selama backend
+/// belum upgrade ke verify Firebase JWT.
 class ApiService {
   static final ApiService _instance = ApiService._internal();
   factory ApiService() => _instance;
@@ -25,8 +21,8 @@ class ApiService {
   // ============================================================
 
   /// Membuat headers untuk request.
-  /// Phase 1: pakai X-Mock-User-Id
-  /// Phase 2: ganti ke Bearer token Firebase
+  /// Menggunakan Firebase Auth ID Token (Bearer).
+  /// Juga kirim X-Mock-User-Id sebagai fallback untuk backend Phase 1.
   Future<Map<String, String>> _getHeaders({bool withAuth = true}) async {
     final headers = {
       'Content-Type': 'application/json',
@@ -34,12 +30,20 @@ class ApiService {
     };
 
     if (withAuth) {
-      // Phase 1: Mock user ID
-      headers['X-Mock-User-Id'] = AppConstants.mockUserId;
-
-      // Phase 2: Uncomment ini dan hapus line di atas
-      // final token = await FirebaseAuth.instance.currentUser?.getIdToken();
-      // if (token != null) headers['Authorization'] = 'Bearer $token';
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        // Firebase Auth Bearer token
+        final token = await user.getIdToken();
+        if (token != null) {
+          headers['Authorization'] = 'Bearer $token';
+        }
+        // Fallback: backend Phase 1 masih pakai X-Mock-User-Id
+        // TODO: Hapus ini setelah backend verify Firebase JWT
+        headers['X-Mock-User-Id'] = user.uid;
+      } else {
+        // User belum login — kirim mock ID sebagai fallback
+        headers['X-Mock-User-Id'] = AppConstants.mockUserId;
+      }
     }
 
     return headers;
