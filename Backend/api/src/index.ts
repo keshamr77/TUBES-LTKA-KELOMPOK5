@@ -12,7 +12,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // === Global Middleware ===
-app.use(cors()); // Allow semua origin (Phase 1). Phase 2: restrict ke domain Flutter & dashboard.
+app.use(cors()); // Allow semua origin (Phase 1-2). Nanti restrict ke domain Flutter & dashboard.
 app.use(express.json({ limit: '1mb' }));
 
 // === Request Logger ===
@@ -23,6 +23,7 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
 
 // === Routes ===
 app.use('/health', healthRouter);
+app.use('/api/sessions', sessionsRouter);
 app.use('/api/attendances', attendancesRouter);
 app.use('/api/sessions', sessionsRouter);
 
@@ -32,9 +33,9 @@ app.get('/', (_req: Request, res: Response) => {
     success: true,
     data: {
       service: 'Absensi GPS API',
-      version: '0.1.0-phase1',
+      version: '0.2.0-phase2',
       docs: 'https://github.com/keshamr77/TUBES-LTKA-KELOMPOK5/blob/fly-backend/API_CONTRACT.md',
-      phase: 'Phase 1 — Mock data, real Haversine',
+      phase: 'Phase 2 — Firestore integration',
     },
   });
 });
