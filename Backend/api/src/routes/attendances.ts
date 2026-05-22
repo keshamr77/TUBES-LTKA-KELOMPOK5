@@ -12,6 +12,7 @@ router.use(requireAuth);
 
 const ATTENDANCES = 'attendances';
 const SESSIONS = 'sessions';
+const USERS = 'users';
 
 /**
  * POST /api/attendances
@@ -145,10 +146,32 @@ router.post('/', async (req: Request, res: Response) => {
       });
     }
 
+    // === Lookup data user (nama & nim) dari collection 'users' ===
+    // Document ID di 'users' = userId (UID Firebase Auth).
+    // Kalau user gak ketemu, absensi tetap disimpan dengan nama/nim null
+    // (biar absensi gak ke-blokir gara-gara data user belum lengkap).
+    let userNama: string | null = null;
+    let userNim: string | null = null;
+    try {
+      const userDoc = await db.collection(USERS).doc(userId).get();
+      if (userDoc.exists) {
+        const userData = userDoc.data() as Record<string, any>;
+        userNama = userData.nama ?? null;
+        userNim = userData.nim ?? null;
+      } else {
+        console.warn(`[POST /attendances] User ${userId} tidak ditemukan di collection users`);
+      }
+    } catch (lookupErr) {
+      // Lookup gagal jangan bikin absensi gagal total — log aja, lanjut dengan null
+      console.error('[POST /attendances] Gagal lookup user:', lookupErr);
+    }
+
     // === Simpan absensi ke Firestore ===
     const newAttendance = {
       sessionId,
       userId,
+      nama: userNama,
+      nim: userNim,
       namaKelas: session.namaKelas ?? null,
       kodeKelas: session.kodeKelas ?? null,
       latitude,
@@ -166,6 +189,8 @@ router.post('/', async (req: Request, res: Response) => {
       data: {
         attendanceId: docRef.id,
         sessionId,
+        nama: userNama,
+        nim: userNim,
         distanceMeters,
         status: 'present',
         timestamp: newAttendance.timestamp.toISOString(),
@@ -211,6 +236,8 @@ router.get('/me', async (req: Request, res: Response) => {
             : new Date(a.timestamp);
         return {
           attendanceId: doc.id,
+          nama: a.nama ?? null,
+          nim: a.nim ?? null,
           session: {
             id: a.sessionId,
             courseName: a.namaKelas ?? 'Unknown',
