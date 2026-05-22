@@ -20,7 +20,7 @@ export default function TabelAbsensi() {
 
   // Ambil semua attendances
   useEffect(() => {
-    const q = query(collection(db, 'attendances'), orderBy('waktu', 'desc'));
+    const q = query(collection(db, 'attendances'), orderBy('timestamp', 'desc'));
     const unsub = onSnapshot(q, (snap) => {
       setData(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       setLoading(false);
@@ -181,6 +181,7 @@ export default function TabelAbsensi() {
                 <th style={thStyle}>NIM</th>
                 {activeTab === 'general' && <th style={thStyle}>Kode Kelas</th>}
                 <th style={thStyle}>Waktu Absen</th>
+                <th style={thStyle}>Nama Kelas</th>
                 <th style={thStyle}>Status</th>
                 <th style={thStyle}>Koordinat</th>
               </tr>
@@ -202,7 +203,12 @@ export default function TabelAbsensi() {
                     {activeTab === 'general' && (
                       <td style={{ ...tdStyle, color: sub }}>{row.kodeKelas || '—'}</td>
                     )}
-                    <td style={{ ...tdStyle, color: sub }}>{row.waktu || '—'}</td>
+                    <td style={{ ...tdStyle, color: sub, fontSize: '12px' }}>
+                      {row.timestamp?.toDate
+                        ? row.timestamp.toDate().toLocaleString('id-ID')
+                        : row.timestamp || '—'}
+                    </td>
+                    <td style={{ ...tdStyle, color: sub }}>{row.namaKelas || '—'}</td>
                     <td style={tdStyle}>
                       <span style={{
                         padding: '3px 10px', borderRadius: '99px', fontSize: '11px',
