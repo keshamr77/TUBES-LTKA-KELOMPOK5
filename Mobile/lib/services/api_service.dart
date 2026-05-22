@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:absensi_lokasi/config/constants.dart';
@@ -66,10 +67,14 @@ class ApiService {
       }
 
       final headers = await _getHeaders(withAuth: withAuth);
+      debugPrint('[ApiService GET] $uri');
+      debugPrint('[ApiService GET] X-Mock-User-Id: ${headers['X-Mock-User-Id']}');
       final response = await http
           .get(uri, headers: headers)
           .timeout(const Duration(seconds: 30));
 
+      debugPrint('[ApiService GET] Status: ${response.statusCode}');
+      debugPrint('[ApiService GET] Body: ${response.body.length > 500 ? response.body.substring(0, 500) : response.body}');
       return _handleResponse(response);
     } on SocketException {
       return ApiResponse.networkError();

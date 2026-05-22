@@ -192,10 +192,14 @@ router.get('/me', async (req: Request, res: Response) => {
     const userId = req.userId!;
     const limit = Math.min(parseInt(req.query.limit as string, 10) || 20, 50);
 
+    console.log(`[GET /attendances/me] userId="${userId}", limit=${limit}`);
+
     const snapshot = await db
       .collection(ATTENDANCES)
       .where('userId', '==', userId)
       .get();
+
+    console.log(`[GET /attendances/me] Found ${snapshot.size} documents for userId="${userId}"`);
 
     // Sort by timestamp desc di sisi server (hindari butuh composite index)
     const attendances = snapshot.docs

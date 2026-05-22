@@ -1,12 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
-import { firebaseApp, admin } from '../utils/firebase';
+import admin from 'firebase-admin';
+import { auth } from '../config/firebase';
 
 /**
  * Middleware untuk autentikasi user menggunakan Firebase ID Token.
  * 
  * Flow:
  * 1. Cek header `Authorization: Bearer <token>`
- * 2. Jika ada dan Firebase Admin aktif, verifikasi token tersebut
+ * 2. Jika ada, verifikasi token tersebut dengan Firebase Admin Auth
  * 3. Jika token valid, inject `userId` dan `userEmail` ke objek `req`
  * 4. Jika token tidak ada atau tidak valid, cek header `X-Mock-User-Id` sebagai fallback
  * 5. Jika kedua cara gagal, kembalikan response 401 Unauthorized
@@ -23,8 +24,8 @@ export const requireAuth = async (
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.split('Bearer ')[1];
 
-    if (!firebaseApp) {
-      // Firebase belum dikonfigurasi, gunakan fallback ke mock UID jika dikirim
+    // Cek apakah Firebase Admin sudah terinisialisasi
+    if (!admin.apps.length) {
       console.warn('⚠️  Firebase Admin tidak terinisialisasi. Melewati verifikasi JWT.');
       if (mockUserIdHeader) {
         req.userId = mockUserIdHeader;
@@ -40,15 +41,14 @@ export const requireAuth = async (
     }
 
     try {
-      const decodedToken = await admin.auth().verifyIdToken(token);
+      const decodedToken = await auth.verifyIdToken(token);
       req.userId = decodedToken.uid;
       req.userEmail = decodedToken.email;
       return next();
     } catch (error: any) {
       console.error('❌ Gagal memverifikasi Firebase ID Token:', error.message);
       
-      // Jika token salah/expired tapi ada mock header, bisa jadi sedang testing lokal
-      // Namun untuk production/keamanan kita harus tolak. Kita izinkan mock di development saja
+      // Jika token salah/expired tapi ada mock header, izinkan di non-production
       if (process.env.NODE_ENV !== 'production' && mockUserIdHeader) {
         console.warn('⚠️  Token tidak valid, tetapi menggunakan fallback X-Mock-User-Id di development.');
         req.userId = mockUserIdHeader;

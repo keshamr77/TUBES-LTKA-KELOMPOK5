@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:absensi_lokasi/config/constants.dart';
 import 'package:absensi_lokasi/models/attendance_model.dart';
 import 'package:absensi_lokasi/models/session_model.dart';
@@ -122,9 +123,13 @@ class AttendanceService {
 
     if (response.success && response.data != null) {
       try {
-        final List<dynamic> records = response.data!['data'] ?? [];
+        debugPrint('[getMyHistory] response.success=true, data keys: ${response.data!.keys.toList()}');
+        final rawData = response.data!['data'];
+        debugPrint('[getMyHistory] rawData type: ${rawData.runtimeType}, length: ${rawData is List ? rawData.length : 'N/A'}');
+        final List<dynamic> records = rawData ?? [];
         final attendances =
             records.map((json) => AttendanceModel.fromJson(json)).toList();
+        debugPrint('[getMyHistory] parsed ${attendances.length} attendances');
 
         return AttendanceHistoryResult(
           success: true,
@@ -132,6 +137,7 @@ class AttendanceService {
           attendances: attendances,
         );
       } catch (e) {
+        debugPrint('[getMyHistory] Parse error: $e');
         return AttendanceHistoryResult(
           success: false,
           message: 'Gagal memproses data riwayat: ${e.toString()}',
@@ -140,6 +146,7 @@ class AttendanceService {
       }
     }
 
+    debugPrint('[getMyHistory] API call failed: success=${response.success}, statusCode=${response.statusCode}, message=${response.message}');
     return AttendanceHistoryResult(
       success: false,
       message: response.message,
