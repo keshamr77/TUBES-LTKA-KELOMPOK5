@@ -7,9 +7,6 @@ import { requireAuth } from '../middleware/auth';
 const router = Router();
 const COLLECTION = 'sessions';
 
-// Semua route di file ini membutuhkan autentikasi
-router.use(requireAuth);
-
 /**
  * Bentuk satu dokumen session jadi response object yang konsisten.
  */
@@ -77,6 +74,9 @@ router.get('/active', async (_req: Request, res: Response) => {
     });
   }
 });
+
+// Semua route di bawah ini membutuhkan autentikasi
+router.use(requireAuth);
 
 /**
  * GET /api/sessions
