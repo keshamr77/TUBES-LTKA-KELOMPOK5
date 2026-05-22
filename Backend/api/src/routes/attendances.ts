@@ -244,6 +244,8 @@ router.get('/me', async (req: Request, res: Response) => {
           },
           timestamp: ts.toISOString(),
           status: a.status,
+          latitude: a.latitude ?? 0.0,
+          longitude: a.longitude ?? 0.0,
           distanceMeters: a.distanceMeters,
           _sortTs: ts.getTime(),
         };

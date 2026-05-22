@@ -36,7 +36,7 @@ class AttendanceModel {
       id: json['attendanceId']?.toString() ?? '',
       sessionId: json['sessionId']?.toString() ?? '',
       timestamp: json['timestamp'] != null
-          ? DateTime.parse(json['timestamp'].toString())
+          ? DateTime.parse(json['timestamp'].toString()).toLocal()
           : DateTime.now(),
       status: json['status']?.toString() ?? 'present',
       distanceMeters: (json['distanceMeters'] as num?)?.toDouble() ?? 0.0,
@@ -54,7 +54,7 @@ class AttendanceModel {
       latitude: (json['latitude'] as num?)?.toDouble() ?? 0.0,
       longitude: (json['longitude'] as num?)?.toDouble() ?? 0.0,
       timestamp: json['timestamp'] != null
-          ? DateTime.parse(json['timestamp'].toString())
+          ? DateTime.parse(json['timestamp'].toString()).toLocal()
           : DateTime.now(),
       status: json['status']?.toString() ?? 'present',
       distanceMeters: (json['distanceMeters'] as num?)?.toDouble() ?? 0.0,
