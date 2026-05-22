@@ -3,7 +3,7 @@ import admin from 'firebase-admin';
 import { db } from '../config/firebase';
 import { isInRadius } from '../utils/haversine';
 import { requireAuth } from '../middleware/auth';
-import { isWithinSessionTime } from '../utils/time';
+import { isWithinSessionTime, formatToWIBString } from '../utils/time';
 
 const router = Router();
 
@@ -167,6 +167,7 @@ router.post('/', async (req: Request, res: Response) => {
     }
 
     // === Simpan absensi ke Firestore ===
+    const now = new Date();
     const newAttendance = {
       sessionId,
       userId,
@@ -179,7 +180,8 @@ router.post('/', async (req: Request, res: Response) => {
       distanceMeters,
       selfieUrl,
       status: 'present',
-      timestamp: new Date(),
+      timestamp: now,
+      waktu: formatToWIBString(now),
     };
 
     const docRef = await db.collection(ATTENDANCES).add(newAttendance);

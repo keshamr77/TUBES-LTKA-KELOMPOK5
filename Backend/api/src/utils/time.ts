@@ -82,3 +82,26 @@ export function isWithinSessionTime(
         : 'ended',
   };
 }
+
+/**
+ * Format Date object ke string format WIB "YYYY-MM-DD HH:mm:ss" (UTC+7)
+ * 
+ * @param date Objek Date
+ * @returns string tanggal dan waktu dalam format "YYYY-MM-DD HH:mm:ss"
+ */
+export function formatToWIBString(date: Date): string {
+  // WIB adalah UTC+7
+  const wibTime = new Date(date.getTime() + WIB_OFFSET_HOURS * 60 * 60 * 1000);
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  
+  const yyyy = wibTime.getUTCFullYear();
+  const mm = pad(wibTime.getUTCMonth() + 1);
+  const dd = pad(wibTime.getUTCDate());
+  
+  const hh = pad(wibTime.getUTCHours());
+  const min = pad(wibTime.getUTCMinutes());
+  const ss = pad(wibTime.getUTCSeconds());
+  
+  return `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`;
+}
+

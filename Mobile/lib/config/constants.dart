@@ -21,7 +21,7 @@ class AppConstants {
   static const String activeSessionsEndpoint = '/sessions/active'; // GET: sesi aktif
 
   // --- Endpoints yang BELUM ada di backend (akan Phase 2) ---
-  // static const String createUserEndpoint = '/users';
+  static const String createUserEndpoint = '/users';
   static const String getUserMeEndpoint = '/users/me';
   // static const String coursesEndpoint = '/courses';
 
