@@ -121,6 +121,25 @@ class AuthService {
       await prefs.setString(AppConstants.prefUserNim, nim);
       await prefs.setString(AppConstants.prefUserEmail, email);
 
+      // Kirim profil baru ke backend untuk disimpan di Firestore
+      try {
+        final syncResponse = await ApiService().post(
+          AppConstants.createUserEndpoint,
+          body: {
+            'name': name,
+            'nim': nim,
+            'email': email,
+          },
+        );
+        if (!syncResponse.success) {
+          debugPrint('Gagal sinkronisasi data user baru ke backend: ${syncResponse.message}');
+        } else {
+          debugPrint('Sukses sinkronisasi data user baru ke backend');
+        }
+      } catch (e) {
+        debugPrint('Error saat sinkronisasi data user baru ke backend: $e');
+      }
+
       final user = UserModel(
         id: cred.user!.uid,
         name: name,
@@ -181,6 +200,32 @@ class AuthService {
         }
         
         return updatedUser;
+      } else if (response.statusCode == 404) {
+        // Self-healing: Jika user tidak ditemukan di Firestore, coba restore dari data lokal SharedPreferences/Firebase
+        final localName = prefs.getString(AppConstants.prefUserName) ?? firebaseUser.displayName ?? '';
+        final localNim = prefs.getString(AppConstants.prefUserNim) ?? '';
+        final localEmail = prefs.getString(AppConstants.prefUserEmail) ?? firebaseUser.email ?? '';
+
+        if (localName.isNotEmpty && localNim.isNotEmpty) {
+          debugPrint('Deteksi user Firestore hilang (404). Mencoba restorasi...');
+          final restoreResponse = await ApiService().post(
+            AppConstants.createUserEndpoint,
+            body: {
+              'name': localName,
+              'nim': localNim,
+              'email': localEmail,
+            },
+          );
+          if (restoreResponse.success) {
+            debugPrint('Sukses merestorasi data user ke Firestore');
+            return UserModel(
+              id: firebaseUser.uid,
+              name: localName,
+              nim: localNim,
+              email: localEmail,
+            );
+          }
+        }
       }
     } catch (e) {
       // Abaikan error jaringan/API, lanjut ke fallback SharedPreferences

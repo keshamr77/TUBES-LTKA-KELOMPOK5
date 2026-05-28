@@ -48,10 +48,11 @@ export const requireAuth = async (
     } catch (error: any) {
       console.error('❌ Gagal memverifikasi Firebase ID Token:', error.message);
       
-      // Jika token salah/expired tapi ada mock header, izinkan di non-production
-      if (process.env.NODE_ENV !== 'production' && mockUserIdHeader) {
-        console.warn('⚠️  Token tidak valid, tetapi menggunakan fallback X-Mock-User-Id di development.');
+      // Jika token salah/expired tapi ada mock header, gunakan fallback X-Mock-User-Id (di dev & prod selama transisi)
+      if (mockUserIdHeader) {
+        console.warn('⚠️  Token tidak valid, tetapi menggunakan fallback X-Mock-User-Id.');
         req.userId = mockUserIdHeader;
+        req.userEmail = `${mockUserIdHeader}@mock.local`;
         return next();
       }
 

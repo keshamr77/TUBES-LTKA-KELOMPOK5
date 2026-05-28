@@ -19,9 +19,10 @@ class AppConstants {
   static const String attendancesEndpoint = '/attendances';     // POST: submit absensi
   static const String myAttendancesEndpoint = '/attendances/me'; // GET: riwayat absensi
   static const String activeSessionsEndpoint = '/sessions/active'; // GET: sesi aktif
+  static const String attendanceStatusEndpoint = '/attendances/me/status'; // GET: status absensi
 
   // --- Endpoints yang BELUM ada di backend (akan Phase 2) ---
-  // static const String createUserEndpoint = '/users';
+  static const String createUserEndpoint = '/users';
   static const String getUserMeEndpoint = '/users/me';
   // static const String coursesEndpoint = '/courses';
 
@@ -81,6 +82,9 @@ class AppConstants {
   static const String errorTokenExpired = 'TOKEN_EXPIRED';
   static const String errorNotEnrolled = 'NOT_ENROLLED';
   static const String errorInvalidPayload = 'INVALID_PAYLOAD';
+  static const String errorCheckInRequired = 'CHECK_IN_REQUIRED';
+  static const String errorOutsideCheckInWindow = 'OUTSIDE_CHECKIN_WINDOW';
+  static const String errorOutsideCheckOutWindow = 'OUTSIDE_CHECKOUT_WINDOW';
 
   // ============================================================
   // App Info

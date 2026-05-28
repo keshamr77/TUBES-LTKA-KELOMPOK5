@@ -35,7 +35,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   bool _isLocationLoading = true;
   bool _isSubmitting = false;
   String? _locationError;
-  bool _hasCheckedInToday = false;
+
+  // Attendance Status State
+  bool _hasCheckedIn = false;
+  bool _hasCheckedOut = false;
+  String? _checkInTime;
+  String? _checkOutTime;
+  bool _isLoadingStatus = false;
+  bool _allowCheckIn = false;
+  bool _allowCheckOut = false;
+  String _windowReason = 'unknown';
 
   // Session State
   bool _isLoadingSessions = true;
@@ -100,6 +109,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     // Setelah mendapat sesi aktif, update perhitungan lokasi jika GPS sudah didapatkan
     if (_latitude != null && _longitude != null) {
       _recalculateLocationDetails(_latitude!, _longitude!);
+    }
+
+    if (_activeSession != null) {
+      await _fetchAttendanceStatus();
     }
   }
 
@@ -205,17 +218,47 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     return now.isAfter(session.startTime) && now.isBefore(session.endTime);
   }
 
-  /// Cek apakah tombol absen harus aktif
-  bool get _canCheckIn {
-    if (_activeSession == null) return false;
-    return _isWithinRadius &&
-        _isWithinSessionTime(_activeSession!) &&
-        !_isSubmitting &&
-        !_hasCheckedInToday;
+  /// Cek status absensi untuk sesi aktif
+  Future<void> _fetchAttendanceStatus() async {
+    if (_activeSession == null || !mounted) return;
+
+    setState(() {
+      _isLoadingStatus = true;
+    });
+
+    final result = await _attendanceService.getSessionStatus(
+      _activeSession!.sessionId,
+    );
+
+    if (!mounted) return;
+
+    setState(() {
+      _isLoadingStatus = false;
+      if (result.success) {
+        _hasCheckedIn = result.hasCheckedIn;
+        _hasCheckedOut = result.hasCheckedOut;
+        _allowCheckIn = result.allowCheckIn;
+        _allowCheckOut = result.allowCheckOut;
+        _windowReason = result.windowReason;
+        debugPrint('[fetchAttendanceStatus] Window reason: $_windowReason');
+
+        if (result.checkInTime != null) {
+          _checkInTime = DateFormat('HH:mm').format(result.checkInTime!);
+        } else {
+          _checkInTime = null;
+        }
+
+        if (result.checkOutTime != null) {
+          _checkOutTime = DateFormat('HH:mm').format(result.checkOutTime!);
+        } else {
+          _checkOutTime = null;
+        }
+      }
+    });
   }
 
-  /// Submit absensi
-  Future<void> _handleCheckIn() async {
+  /// Submit absensi (check-in / check-out)
+  Future<void> _submitAbsensi(String type) async {
     if (_latitude == null || _longitude == null || _user == null) return;
 
     if (_activeSession == null) {
@@ -242,16 +285,26 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       return;
     }
 
-    // Cek jadwal
-    if (!_isWithinSessionTime(_activeSession!)) {
-      final timeStr = '${DateFormat('HH:mm').format(_activeSession!.startTime)} - ${DateFormat('HH:mm').format(_activeSession!.endTime)}';
-      _showWarningDialog(
-        'Di Luar Jadwal',
-        'Sesi absensi tidak aktif. Absensi hanya dapat dilakukan pada '
-            'durasi sesi yang ditentukan ($timeStr).',
-        Icons.schedule,
-        AppTheme.accentRed,
-      );
+    // Cek status window
+    final isTypeCheckIn = type == 'check_in';
+    final isAllowed = isTypeCheckIn ? _allowCheckIn : _allowCheckOut;
+
+    if (!isAllowed) {
+      if (isTypeCheckIn) {
+        _showWarningDialog(
+          'Di Luar Window Absen Masuk',
+          'Waktu absen masuk sudah lewat. Check-in hanya tersedia di 15 menit awal sesi.',
+          Icons.schedule,
+          AppTheme.accentRed,
+        );
+      } else {
+        _showWarningDialog(
+          'Belum Waktunya Absen Keluar',
+          'Belum waktunya absen keluar. Check-out hanya tersedia di 15 menit akhir sesi.',
+          Icons.schedule,
+          AppTheme.accentRed,
+        );
+      }
       return;
     }
 
@@ -263,14 +316,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       sessionId: sessionId,
       latitude: _latitude!,
       longitude: _longitude!,
+      type: type,
     );
 
     if (!mounted) return;
     setState(() => _isSubmitting = false);
 
     if (result.success) {
-      setState(() => _hasCheckedInToday = true);
-      _showSuccessDialog();
+      await _fetchAttendanceStatus();
+      _showSuccessDialog(type);
     } else {
       // Handle error spesifik dari backend
       String errorTitle = 'Gagal Absen';
@@ -280,7 +334,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       if (result.errorCode == AppConstants.errorOutOfRadius) {
         errorTitle = 'Di Luar Radius Kampus';
         errorIcon = Icons.location_off;
-        // Tambahkan info jarak jika tersedia dari backend
         String msg = result.message;
         if (result.distanceMeters != null) {
           msg += '\n\nJarak Anda: ${result.distanceMeters!.toStringAsFixed(1)} meter'
@@ -292,7 +345,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         errorTitle = 'Sudah Absen';
         errorIcon = Icons.check_circle;
         errorColor = AppTheme.accentAmber;
-        setState(() => _hasCheckedInToday = true);
+        await _fetchAttendanceStatus();
       }
 
       _showWarningDialog(errorTitle, result.message, errorIcon, errorColor);
@@ -300,7 +353,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   /// Dialog berhasil absen
-  void _showSuccessDialog() {
+  void _showSuccessDialog(String type) {
+    final label = type == 'check_in' ? 'Absen Masuk Berhasil!' : 'Absen Keluar Berhasil!';
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -325,9 +379,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ),
             ),
             const SizedBox(height: 20),
-            const Text(
-              'Absensi Berhasil!',
-              style: TextStyle(
+            Text(
+              label,
+              style: const TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
                 color: AppTheme.textPrimary,
@@ -489,7 +543,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 _buildCheckInButton(),
 
                 // Status sudah absen
-                if (_hasCheckedInToday) ...[
+                if (_activeSession != null) ...[
                   const SizedBox(height: 16),
                   _buildCheckedInBanner(),
                 ],
@@ -866,76 +920,145 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  /// Tombol absen utama
+  /// Tombol absen masuk & keluar
   Widget _buildCheckInButton() {
-    return AnimatedBuilder(
-      animation: _pulseAnimation,
-      builder: (context, _) {
-        return Transform.scale(
-          scale: _canCheckIn ? _pulseAnimation.value : 1.0,
-          child: CustomButton(
-            text: _hasCheckedInToday ? 'Sudah Absen Hari Ini' : 'Absen Sekarang',
-            icon: _hasCheckedInToday
-                ? Icons.check_circle
-                : Icons.fingerprint,
-            isLoading: _isSubmitting,
-            backgroundColor: _hasCheckedInToday
-                ? AppTheme.textHint
-                : _canCheckIn
-                    ? AppTheme.accentGreen
-                    : AppTheme.cardLighter,
-            onPressed: _canCheckIn ? _handleCheckIn : () {
-              // Tampilkan alasan tidak bisa absen
-              if (_activeSession == null) {
-                _showWarningDialog(
-                  'Tidak Ada Sesi',
-                  'Tidak ada sesi absensi yang aktif saat ini.',
-                  Icons.event_busy,
-                  AppTheme.textHint,
-                );
-              } else if (!_isWithinRadius && !_isLocationLoading) {
-                final radius = _activeSession!.radiusMeters;
-                final course = _activeSession!.courseName;
-                _showWarningDialog(
-                  'Di Luar Radius Kelas',
-                  'Anda berada di luar radius ${radius.toInt()} meter dari lokasi kelas $course.',
-                  Icons.location_off,
-                  AppTheme.accentRed,
-                );
-              } else if (!_isWithinSessionTime(_activeSession!)) {
-                _showWarningDialog(
-                  'Di Luar Jadwal Sesi',
-                  'Sesi perkuliahan sedang tidak berlangsung atau sudah berakhir.',
-                  Icons.schedule,
-                  AppTheme.accentAmber,
-                );
-              }
-            },
-            height: 60,
-          ),
-        );
-      },
+    if (_isLoadingStatus) {
+      return Container(
+        height: 60,
+        decoration: BoxDecoration(
+          color: AppTheme.cardLighter,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: const Center(
+          child: CircularProgressIndicator(color: AppTheme.accentGreen),
+        ),
+      );
+    }
+
+    final canCheckIn = _isWithinRadius && _allowCheckIn && !_hasCheckedIn && !_isSubmitting;
+    final canCheckOut = _isWithinRadius && _allowCheckOut && _hasCheckedIn && !_hasCheckedOut && !_isSubmitting;
+
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: AnimatedBuilder(
+                animation: _pulseAnimation,
+                builder: (context, _) {
+                  return Transform.scale(
+                    scale: (canCheckIn && !_hasCheckedIn) ? _pulseAnimation.value : 1.0,
+                    child: CustomButton(
+                      text: _hasCheckedIn ? 'Sudah Masuk' : 'Absen Masuk',
+                      icon: Icons.login,
+                      isLoading: _isSubmitting && !_hasCheckedIn,
+                      backgroundColor: _hasCheckedIn
+                          ? AppTheme.textHint
+                          : canCheckIn
+                              ? AppTheme.accentGreen
+                              : AppTheme.cardLighter,
+                      onPressed: canCheckIn
+                          ? () => _submitAbsensi('check_in')
+                          : () {
+                              if (_activeSession == null) {
+                                _showWarningDialog('Tidak Ada Sesi', 'Tidak ada sesi absensi yang aktif saat ini.', Icons.event_busy, AppTheme.textHint);
+                              } else if (_hasCheckedIn) {
+                                // Gak ngapa-ngapain
+                              } else if (!_isWithinRadius && !_isLocationLoading) {
+                                _showWarningDialog('Di Luar Radius Kelas', 'Anda berada di luar radius ${_activeSession!.radiusMeters.toInt()} meter dari lokasi kelas.', Icons.location_off, AppTheme.accentRed);
+                              } else if (!_allowCheckIn) {
+                                _showWarningDialog('Di Luar Window Absen', 'Absen masuk hanya tersedia di 15 menit awal sesi.', Icons.schedule, AppTheme.accentAmber);
+                              }
+                            },
+                      height: 54,
+                    ),
+                  );
+                }
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: AnimatedBuilder(
+                animation: _pulseAnimation,
+                builder: (context, _) {
+                  return Transform.scale(
+                    scale: (canCheckOut && !_hasCheckedOut) ? _pulseAnimation.value : 1.0,
+                    child: CustomButton(
+                      text: _hasCheckedOut ? 'Sudah Keluar' : 'Absen Keluar',
+                      icon: Icons.logout,
+                      isLoading: _isSubmitting && _hasCheckedIn && !_hasCheckedOut,
+                      backgroundColor: _hasCheckedOut
+                          ? AppTheme.textHint
+                          : canCheckOut
+                              ? Colors.blue
+                              : AppTheme.cardLighter,
+                      onPressed: canCheckOut
+                          ? () => _submitAbsensi('check_out')
+                          : () {
+                              if (_activeSession == null) {
+                                _showWarningDialog('Tidak Ada Sesi', 'Tidak ada sesi absensi yang aktif saat ini.', Icons.event_busy, AppTheme.textHint);
+                              } else if (!_hasCheckedIn) {
+                                _showWarningDialog('Absen Masuk Diperlukan', 'Anda harus melakukan absen masuk terlebih dahulu.', Icons.warning_amber, AppTheme.accentAmber);
+                              } else if (_hasCheckedOut) {
+                                // Gak ngapa-ngapain
+                              } else if (!_isWithinRadius && !_isLocationLoading) {
+                                _showWarningDialog('Di Luar Radius Kelas', 'Anda berada di luar radius ${_activeSession!.radiusMeters.toInt()} meter dari lokasi kelas.', Icons.location_off, AppTheme.accentRed);
+                              } else if (!_allowCheckOut) {
+                                _showWarningDialog('Di Luar Window Absen', 'Absen keluar hanya tersedia di 15 menit akhir sesi.', Icons.schedule, AppTheme.accentAmber);
+                              }
+                            },
+                      height: 54,
+                    ),
+                  );
+                }
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
-  /// Banner sudah absen hari ini
+  /// Banner status absen
   Widget _buildCheckedInBanner() {
+    String text = 'Belum melakukan absensi untuk sesi ini.';
+    Color color = AppTheme.textHint;
+    IconData icon = Icons.info_outline;
+
+    if (_hasCheckedIn && _hasCheckedOut) {
+      text = 'Absensi Selesai: Masuk ($_checkInTime) · Keluar ($_checkOutTime)';
+      color = AppTheme.accentGreen;
+      icon = Icons.verified;
+    } else if (_hasCheckedIn) {
+      text = 'Sudah Absen Masuk pada $_checkInTime. Jangan lupa absen keluar!';
+      color = Colors.blue;
+      icon = Icons.check_circle;
+    } else if (!_allowCheckIn && !_hasCheckedIn) {
+      text = 'Sesi sudah berjalan lebih dari 15 menit. Anda tidak dapat melakukan absen masuk.';
+      color = AppTheme.accentRed;
+      icon = Icons.error_outline;
+    }
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.accentGreen.withOpacity(0.1),
+        color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.accentGreen.withOpacity(0.3)),
+        border: Border.all(color: color.withOpacity(0.3)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.check_circle, color: AppTheme.accentGreen, size: 22),
+          Icon(icon, color: color, size: 22),
           const SizedBox(width: 10),
-          const Expanded(
+          Expanded(
             child: Text(
-              'Anda sudah melakukan absensi hari ini.',
-              style: TextStyle(color: AppTheme.accentGreenLight, fontSize: 13),
+              text,
+              style: TextStyle(
+                color: color == AppTheme.textHint ? AppTheme.textSecondary : color,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ],

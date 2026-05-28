@@ -20,7 +20,7 @@ export default function TabelAbsensi() {
 
   // Ambil semua attendances
   useEffect(() => {
-    const q = query(collection(db, 'attendances'), orderBy('waktu', 'desc'));
+    const q = query(collection(db, 'attendances'), orderBy('timestamp', 'desc'));
     const unsub = onSnapshot(q, (snap) => {
       setData(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       setLoading(false);
@@ -53,11 +53,11 @@ export default function TabelAbsensi() {
 
   const handleExportCSV = (rows, filename) => {
     const headers = activeTab === 'general'
-      ? ['Nama', 'NIM', 'Kode Kelas', 'Waktu', 'Status', 'Koordinat']
-      : ['Nama', 'NIM', 'Waktu', 'Status', 'Koordinat'];
+      ? ['Nama', 'NIM', 'Kode Kelas', 'Waktu', 'Tipe', 'Status', 'Koordinat']
+      : ['Nama', 'NIM', 'Waktu', 'Tipe', 'Status', 'Koordinat'];
     const csvRows = rows.map(r => activeTab === 'general'
-      ? [r.nama || '-', r.nim || '-', r.kodeKelas || '-', r.waktu || '-', normalizeStatus(r.status), `${r.latitude || ''} ${r.longitude || ''}`]
-      : [r.nama || '-', r.nim || '-', r.waktu || '-', normalizeStatus(r.status), `${r.latitude || ''} ${r.longitude || ''}`]
+      ? [r.nama || '-', r.nim || '-', r.kodeKelas || '-', r.timestamp?.toDate ? r.timestamp.toDate().toLocaleString('id-ID') : (r.timestamp || '-'), r.type === 'check_out' ? 'Keluar' : 'Masuk', normalizeStatus(r.status), `${r.latitude || ''} ${r.longitude || ''}`]
+      : [r.nama || '-', r.nim || '-', r.timestamp?.toDate ? r.timestamp.toDate().toLocaleString('id-ID') : (r.timestamp || '-'), r.type === 'check_out' ? 'Keluar' : 'Masuk', normalizeStatus(r.status), `${r.latitude || ''} ${r.longitude || ''}`]
     );
     const csv = [headers, ...csvRows].map(r => r.join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -181,6 +181,8 @@ export default function TabelAbsensi() {
                 <th style={thStyle}>NIM</th>
                 {activeTab === 'general' && <th style={thStyle}>Kode Kelas</th>}
                 <th style={thStyle}>Waktu Absen</th>
+                <th style={thStyle}>Nama Kelas</th>
+                <th style={thStyle}>Tipe</th>
                 <th style={thStyle}>Status</th>
                 <th style={thStyle}>Koordinat</th>
               </tr>
@@ -202,7 +204,22 @@ export default function TabelAbsensi() {
                     {activeTab === 'general' && (
                       <td style={{ ...tdStyle, color: sub }}>{row.kodeKelas || '—'}</td>
                     )}
-                    <td style={{ ...tdStyle, color: sub }}>{row.waktu || '—'}</td>
+                    <td style={{ ...tdStyle, color: sub, fontSize: '12px' }}>
+                      {row.timestamp?.toDate
+                        ? row.timestamp.toDate().toLocaleString('id-ID')
+                        : row.timestamp || '—'}
+                    </td>
+                    <td style={{ ...tdStyle, color: sub }}>{row.namaKelas || '—'}</td>
+                    <td style={tdStyle}>
+                      <span style={{
+                        padding: '3px 8px', borderRadius: '4px', fontSize: '11px',
+                        fontWeight: '500',
+                        background: row.type === 'check_out' ? (dark ? 'rgba(33, 150, 243, 0.15)' : '#e3f2fd') : (dark ? 'rgba(76, 175, 80, 0.15)' : '#e8f5e9'),
+                        color: row.type === 'check_out' ? (dark ? '#90caf9' : '#1e88e5') : (dark ? '#a5d6a7' : '#2e7d32'),
+                      }}>
+                        {row.type === 'check_out' ? 'Keluar' : 'Masuk'}
+                      </span>
+                    </td>
                     <td style={tdStyle}>
                       <span style={{
                         padding: '3px 10px', borderRadius: '99px', fontSize: '11px',

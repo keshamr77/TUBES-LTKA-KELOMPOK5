@@ -86,7 +86,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
               ],
             ),
           ),
-          if (_attendances.isNotEmpty)
+          IconButton(
+            icon: Icon(Icons.refresh, color: AppTheme.textPrimary.withOpacity(0.8)),
+            tooltip: 'Refresh',
+            onPressed: _loadHistory,
+          ),
+          if (_attendances.isNotEmpty) ...[
+            const SizedBox(width: 8),
             Container(
               padding:
                   const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -100,6 +106,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       fontSize: 13,
                       fontWeight: FontWeight.w600)),
             ),
+          ],
         ],
       ),
     );
@@ -145,23 +152,43 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
 
     if (_attendances.isEmpty) {
-      return const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.history, size: 56, color: AppTheme.textHint),
-            SizedBox(height: 16),
-            Text('Belum Ada Riwayat',
-                style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.textPrimary)),
-            SizedBox(height: 8),
-            Text('Riwayat absensi akan muncul\nsetelah Anda melakukan absensi.',
-                textAlign: TextAlign.center,
-                style:
-                    TextStyle(fontSize: 14, color: AppTheme.textSecondary)),
-          ],
+      return RefreshIndicator(
+        onRefresh: _loadHistory,
+        color: AppTheme.accentGreen,
+        backgroundColor: AppTheme.cardDark,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Container(
+            height: MediaQuery.of(context).size.height * 0.6,
+            alignment: Alignment.center,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.history, size: 56, color: AppTheme.textHint),
+                const SizedBox(height: 16),
+                const Text('Belum Ada Riwayat',
+                    style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary)),
+                const SizedBox(height: 8),
+                const Text('Riwayat absensi akan muncul\nsetelah Anda melakukan absensi.',
+                    textAlign: TextAlign.center,
+                    style:
+                        TextStyle(fontSize: 14, color: AppTheme.textSecondary)),
+                const SizedBox(height: 20),
+                ElevatedButton.icon(
+                  onPressed: _loadHistory,
+                  icon: const Icon(Icons.refresh, size: 18),
+                  label: const Text('Refresh'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.cardDark,
+                    foregroundColor: AppTheme.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       );
     }
