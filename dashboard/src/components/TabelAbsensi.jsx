@@ -143,8 +143,15 @@ export default function TabelAbsensi() {
           </select>
           {selectedSessionData && (
             <div style={{ marginTop: '10px', fontSize: '12px', color: sub, display: 'flex', gap: '16px' }}>
-              <span>🕐 {selectedSessionData.jamMulai} – {selectedSessionData.jamSelesai}</span>
-              <span>📍 Radius {selectedSessionData.radius}m</span>
+            <span>🕐 {selectedSessionData.jamMulai} – {selectedSessionData.jamSelesai}</span>
+              {selectedSessionData.modePilihan === 'wfh' ? (
+                <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', background: '#e3f2fd', color: '#1565c0', fontWeight: '500' }}>🏠 WFH</span>
+              ) : (
+                <>
+                  <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', background: '#e8f5e9', color: '#2e7d32', fontWeight: '500' }}>🏫 {selectedSessionData.lokasiKelas || 'Kelas'}</span>
+                  <span>📍 Radius {selectedSessionData.radius}m</span>
+                </>
+              )}
               <span style={{
                 padding: '2px 8px', borderRadius: '99px', fontSize: '11px',
                 background: selectedSessionData.status === 'open' ? '#e8f5e9' : '#ffebee',
