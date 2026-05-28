@@ -79,8 +79,12 @@ export default function KelolaSesi() {
         radius: isKelas ? parseInt(form.radius) : 0,
         latitude: checkpoint ? checkpoint.lat : null,
         longitude: checkpoint ? checkpoint.lng : null,
+        // Field lama (dashboard UI)
         modePilihan: form.modePilihan,
         lokasiKelas: isKelas ? form.lokasiKelas : null,
+        // Field baru (backend locationType compat)
+        locationType: isKelas ? 'smart_classroom' : 'wfh',
+        locationRequired: isKelas,
         status: 'open',
         dosenEmail: auth.currentUser?.email,
         createdAt: serverTimestamp(),
