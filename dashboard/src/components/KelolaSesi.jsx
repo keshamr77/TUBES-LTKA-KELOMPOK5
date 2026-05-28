@@ -8,7 +8,10 @@ import { useTheme } from '../context/ThemeContext';
 import { useToast } from '../context/ToastContext';
 import Modal from './Modal';
 
-const KAMPUS_ITB = { lat: -6.890590, lng: 107.610692 };
+const CHECKPOINTS = {
+  LTRGM: { label: 'LTRGM', lat: -6.890535729447833, lng: 107.60826648987447 },
+  'LABTEK VIII': { label: 'LABTEK VIII', lat: -6.890526003964189, lng: 107.6111579521029 },
+};
 
 export default function KelolaSesi() {
   const { dark } = useTheme();
@@ -22,6 +25,7 @@ export default function KelolaSesi() {
     namaKelas: '', kodeKelas: '',
     tanggal: new Date().toISOString().split('T')[0],
     jamMulai: '', jamSelesai: '', radius: '100',
+    modePilihan: 'kelas', lokasiKelas: 'LTRGM',
   });
 
   const bg = dark ? '#1a1a1a' : '#fff';
@@ -58,23 +62,35 @@ export default function KelolaSesi() {
       addToast('Mohon lengkapi semua field yang wajib diisi.', 'error');
       return;
     }
+    if (form.modePilihan === 'kelas' && !form.lokasiKelas) {
+      addToast('Mohon pilih lokasi kelas.', 'error');
+      return;
+    }
     setSubmitting(true);
     try {
+      const isKelas = form.modePilihan === 'kelas';
+      const checkpoint = isKelas ? CHECKPOINTS[form.lokasiKelas] : null;
       await addDoc(collection(db, 'sessions'), {
         namaKelas: form.namaKelas,
         kodeKelas: form.kodeKelas,
         tanggal: form.tanggal,
         jamMulai: form.jamMulai,
         jamSelesai: form.jamSelesai,
-        radius: parseInt(form.radius),
-        latitude: KAMPUS_ITB.lat,
-        longitude: KAMPUS_ITB.lng,
+        radius: isKelas ? parseInt(form.radius) : 0,
+        latitude: checkpoint ? checkpoint.lat : null,
+        longitude: checkpoint ? checkpoint.lng : null,
+        // Field lama (dashboard UI)
+        modePilihan: form.modePilihan,
+        lokasiKelas: isKelas ? form.lokasiKelas : null,
+        // Field baru (backend locationType compat)
+        locationType: isKelas ? 'smart_classroom' : 'wfh',
+        locationRequired: isKelas,
         status: 'open',
         dosenEmail: auth.currentUser?.email,
         createdAt: serverTimestamp(),
       });
       setFormOpen(false);
-      setForm({ namaKelas: '', kodeKelas: '', tanggal: new Date().toISOString().split('T')[0], jamMulai: '', jamSelesai: '', radius: '100' });
+      setForm({ namaKelas: '', kodeKelas: '', tanggal: new Date().toISOString().split('T')[0], jamMulai: '', jamSelesai: '', radius: '100', modePilihan: 'kelas', lokasiKelas: 'LTRGM' });
       addToast('Sesi berhasil dibuat!', 'success');
     } catch (err) {
       addToast('Gagal membuat sesi: ' + err.message, 'error');
@@ -167,6 +183,32 @@ export default function KelolaSesi() {
       {formOpen && (
         <div style={{ background: bg, borderRadius: '12px', border: `0.5px solid ${border}`, padding: '20px 24px', marginBottom: '20px' }}>
           <h3 style={{ fontSize: '15px', fontWeight: '600', marginBottom: '16px', color: text }}>Buat Sesi Baru</h3>
+
+          {/* Mode Pilihan: Kelas / WFH */}
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: sub, marginBottom: '8px' }}>Mode Kehadiran *</label>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              {[{ key: 'kelas', icon: '🏫', label: 'Kelas (Onsite)' }, { key: 'wfh', icon: '🏠', label: 'WFH (Online)' }].map(m => (
+                <button
+                  key={m.key}
+                  type="button"
+                  onClick={() => setForm({ ...form, modePilihan: m.key })}
+                  style={{
+                    flex: 1, padding: '12px 16px', borderRadius: '10px', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', fontWeight: '500',
+                    border: form.modePilihan === m.key ? '2px solid #1a73e8' : `1px solid ${border}`,
+                    background: form.modePilihan === m.key ? (dark ? 'rgba(26,115,232,0.12)' : '#e8f0fe') : 'transparent',
+                    color: form.modePilihan === m.key ? '#1a73e8' : text,
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <span style={{ fontSize: '20px' }}>{m.icon}</span>
+                  {m.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
             {[
               { label: 'Nama Kelas *', key: 'namaKelas', placeholder: 'Layanan Tersambung & Komputasi Awan', type: 'text' },
@@ -186,15 +228,41 @@ export default function KelolaSesi() {
                 />
               </div>
             ))}
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: sub, marginBottom: '6px' }}>Radius</label>
-              <select style={inputStyle} value={form.radius} onChange={e => setForm({ ...form, radius: e.target.value })}>
-                {['50', '100', '200', '300'].map(r => <option key={r} value={r}>{r} meter</option>)}
-              </select>
-            </div>
+
+            {/* Lokasi Kelas — hanya muncul di mode kelas */}
+            {form.modePilihan === 'kelas' && (
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: sub, marginBottom: '6px' }}>Lokasi Kelas *</label>
+                <select style={inputStyle} value={form.lokasiKelas} onChange={e => setForm({ ...form, lokasiKelas: e.target.value })}>
+                  {Object.keys(CHECKPOINTS).map(k => <option key={k} value={k}>{CHECKPOINTS[k].label}</option>)}
+                </select>
+              </div>
+            )}
+
+            {/* Radius — hanya muncul di mode kelas */}
+            {form.modePilihan === 'kelas' && (
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: sub, marginBottom: '6px' }}>Radius</label>
+                <select style={inputStyle} value={form.radius} onChange={e => setForm({ ...form, radius: e.target.value })}>
+                  {['50', '100', '200', '300'].map(r => <option key={r} value={r}>{r} meter</option>)}
+                </select>
+              </div>
+            )}
           </div>
-          <div style={{ fontSize: '12px', color: sub, background: dark ? '#111' : '#f5f5f5', padding: '8px 12px', borderRadius: '8px', marginBottom: '14px' }}>
-            📍 Lokasi: ITB Ganesha ({KAMPUS_ITB.lat}, {KAMPUS_ITB.lng}) · Auto close saat jam selesai
+
+          {/* Info panel */}
+          <div style={{ fontSize: '12px', color: sub, background: dark ? '#111' : '#f5f5f5', padding: '10px 14px', borderRadius: '8px', marginBottom: '14px', lineHeight: '1.6' }}>
+            {form.modePilihan === 'kelas' ? (
+              <>
+                📍 Lokasi: <strong style={{ color: text }}>{CHECKPOINTS[form.lokasiKelas]?.label}</strong>{' '}
+                ({CHECKPOINTS[form.lokasiKelas]?.lat}, {CHECKPOINTS[form.lokasiKelas]?.lng})
+                {' · '} Radius {form.radius}m · Auto close saat jam selesai
+              </>
+            ) : (
+              <>
+                🏠 Mode WFH — Mahasiswa bisa absen dari mana saja tanpa validasi GPS · Auto close saat jam selesai
+              </>
+            )}
           </div>
           <button
             onClick={handleBuatSesi}
@@ -234,9 +302,16 @@ export default function KelolaSesi() {
                 </div>
 
                 {/* Info */}
-                <div style={{ display: 'flex', gap: '16px', fontSize: '12px', color: sub, marginBottom: '14px' }}>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', fontSize: '12px', color: sub, marginBottom: '14px' }}>
                   <span>🕐 {sesi.jamMulai} – {sesi.jamSelesai}</span>
-                  <span>📍 Radius {sesi.radius}m</span>
+                  {sesi.modePilihan === 'wfh' ? (
+                    <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', background: dark ? 'rgba(33,150,243,0.15)' : '#e3f2fd', color: dark ? '#90caf9' : '#1565c0', fontWeight: '500' }}>🏠 WFH</span>
+                  ) : (
+                    <>
+                      <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', background: dark ? 'rgba(76,175,80,0.15)' : '#e8f5e9', color: dark ? '#a5d6a7' : '#2e7d32', fontWeight: '500' }}>🏫 {sesi.lokasiKelas || 'Kelas'}</span>
+                      <span>📍 Radius {sesi.radius}m</span>
+                    </>
+                  )}
                 </div>
 
                 {/* Statistik */}

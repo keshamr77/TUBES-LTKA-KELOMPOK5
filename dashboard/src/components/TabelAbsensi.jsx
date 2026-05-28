@@ -143,8 +143,15 @@ export default function TabelAbsensi() {
           </select>
           {selectedSessionData && (
             <div style={{ marginTop: '10px', fontSize: '12px', color: sub, display: 'flex', gap: '16px' }}>
-              <span>🕐 {selectedSessionData.jamMulai} – {selectedSessionData.jamSelesai}</span>
-              <span>📍 Radius {selectedSessionData.radius}m</span>
+            <span>🕐 {selectedSessionData.jamMulai} – {selectedSessionData.jamSelesai}</span>
+              {selectedSessionData.modePilihan === 'wfh' ? (
+                <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', background: '#e3f2fd', color: '#1565c0', fontWeight: '500' }}>🏠 WFH</span>
+              ) : (
+                <>
+                  <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', background: '#e8f5e9', color: '#2e7d32', fontWeight: '500' }}>🏫 {selectedSessionData.lokasiKelas || 'Kelas'}</span>
+                  <span>📍 Radius {selectedSessionData.radius}m</span>
+                </>
+              )}
               <span style={{
                 padding: '2px 8px', borderRadius: '99px', fontSize: '11px',
                 background: selectedSessionData.status === 'open' ? '#e8f5e9' : '#ffebee',
@@ -181,7 +188,7 @@ export default function TabelAbsensi() {
                 <th style={thStyle}>NIM</th>
                 {activeTab === 'general' && <th style={thStyle}>Kode Kelas</th>}
                 <th style={thStyle}>Waktu Absen</th>
-                <th style={thStyle}>Nama Kelas</th>
+                {activeTab === 'general' && <th style={thStyle}>Nama Kelas</th>}
                 <th style={thStyle}>Tipe</th>
                 <th style={thStyle}>Status</th>
                 <th style={thStyle}>Koordinat</th>
@@ -209,7 +216,9 @@ export default function TabelAbsensi() {
                         ? row.timestamp.toDate().toLocaleString('id-ID')
                         : row.timestamp || '—'}
                     </td>
-                    <td style={{ ...tdStyle, color: sub }}>{row.namaKelas || '—'}</td>
+                    {activeTab === 'general' && (
+                      <td style={{ ...tdStyle, color: sub }}>{row.namaKelas || '—'}</td>
+                    )}
                     <td style={tdStyle}>
                       <span style={{
                         padding: '3px 8px', borderRadius: '4px', fontSize: '11px',
