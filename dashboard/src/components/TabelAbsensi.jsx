@@ -181,7 +181,7 @@ export default function TabelAbsensi() {
                 <th style={thStyle}>NIM</th>
                 {activeTab === 'general' && <th style={thStyle}>Kode Kelas</th>}
                 <th style={thStyle}>Waktu Absen</th>
-                <th style={thStyle}>Nama Kelas</th>
+                {activeTab === 'general' && <th style={thStyle}>Nama Kelas</th>}
                 <th style={thStyle}>Tipe</th>
                 <th style={thStyle}>Status</th>
                 <th style={thStyle}>Koordinat</th>
@@ -209,7 +209,9 @@ export default function TabelAbsensi() {
                         ? row.timestamp.toDate().toLocaleString('id-ID')
                         : row.timestamp || '—'}
                     </td>
-                    <td style={{ ...tdStyle, color: sub }}>{row.namaKelas || '—'}</td>
+                    {activeTab === 'general' && (
+                      <td style={{ ...tdStyle, color: sub }}>{row.namaKelas || '—'}</td>
+                    )}
                     <td style={tdStyle}>
                       <span style={{
                         padding: '3px 8px', borderRadius: '4px', fontSize: '11px',
