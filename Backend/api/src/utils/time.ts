@@ -105,3 +105,50 @@ export function formatToWIBString(date: Date): string {
   return `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`;
 }
 
+const ATTENDANCE_WINDOW_MINUTES = 15;
+
+/**
+ * Cek apakah waktu sekarang berada di window check-in (15 menit awal sesi)
+ * atau window check-out (15 menit akhir sesi).
+ *
+ * - Check-in:  jamMulai s.d. jamMulai + 15 menit
+ * - Check-out: jamSelesai - 15 menit s.d. jamSelesai
+ *
+ * @returns Object berisi allowCheckIn, allowCheckOut, dan reason
+ */
+export function getAttendanceWindow(
+  tanggal: string,
+  jamMulai: string,
+  jamSelesai: string,
+): {
+  allowCheckIn: boolean;
+  allowCheckOut: boolean;
+  reason: string;
+} {
+  const startTime = parseWIBDateTime(tanggal, jamMulai);
+  const endTime = parseWIBDateTime(tanggal, jamSelesai);
+
+  if (!startTime || !endTime) {
+    return { allowCheckIn: false, allowCheckOut: false, reason: 'invalid_time' };
+  }
+
+  const now = new Date();
+  const windowMs = ATTENDANCE_WINDOW_MINUTES * 60 * 1000;
+
+  // Check-in window: [startTime, startTime + 15 min]
+  const checkInEnd = new Date(startTime.getTime() + windowMs);
+  const allowCheckIn = now >= startTime && now <= checkInEnd;
+
+  // Check-out window: [endTime - 15 min, endTime]
+  const checkOutStart = new Date(endTime.getTime() - windowMs);
+  const allowCheckOut = now >= checkOutStart && now <= endTime;
+
+  let reason = 'outside_window';
+  if (now < startTime) reason = 'not_started';
+  else if (now > endTime) reason = 'ended';
+  else if (allowCheckIn) reason = 'check_in_window';
+  else if (allowCheckOut) reason = 'check_out_window';
+  else reason = 'between_windows';
+
+  return { allowCheckIn, allowCheckOut, reason };
+}

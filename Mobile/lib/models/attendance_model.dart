@@ -12,6 +12,7 @@ class AttendanceModel {
   final String id;
   final String sessionId;
   final String? courseName;
+  final String type; // 'check_in' or 'check_out'
   final double latitude;
   final double longitude;
   final DateTime timestamp;
@@ -22,6 +23,7 @@ class AttendanceModel {
     required this.id,
     required this.sessionId,
     this.courseName,
+    this.type = 'check_in',
     this.latitude = 0.0,
     this.longitude = 0.0,
     required this.timestamp,
@@ -35,6 +37,7 @@ class AttendanceModel {
     return AttendanceModel(
       id: json['attendanceId']?.toString() ?? '',
       sessionId: json['sessionId']?.toString() ?? '',
+      type: json['type']?.toString() ?? 'check_in',
       timestamp: json['timestamp'] != null
           ? DateTime.parse(json['timestamp'].toString()).toLocal()
           : DateTime.now(),
@@ -51,6 +54,7 @@ class AttendanceModel {
       id: json['attendanceId']?.toString() ?? json['id']?.toString() ?? '',
       sessionId: session?['id']?.toString() ?? json['sessionId']?.toString() ?? '',
       courseName: session?['courseName']?.toString(),
+      type: json['type']?.toString() ?? 'check_in',
       latitude: (json['latitude'] as num?)?.toDouble() ?? 0.0,
       longitude: (json['longitude'] as num?)?.toDouble() ?? 0.0,
       timestamp: json['timestamp'] != null
@@ -86,6 +90,18 @@ class AttendanceModel {
     }
   }
 
+  /// Label tipe absensi dalam Bahasa Indonesia
+  String get typeLabel {
+    switch (type) {
+      case 'check_in':
+        return 'Masuk';
+      case 'check_out':
+        return 'Keluar';
+      default:
+        return type;
+    }
+  }
+
   /// Format jarak
   String get distanceLabel {
     if (distanceMeters < 1000) {
@@ -96,5 +112,5 @@ class AttendanceModel {
 
   @override
   String toString() =>
-      'AttendanceModel(id: $id, status: $status, distance: ${distanceMeters.toStringAsFixed(1)}m)';
+      'AttendanceModel(id: $id, type: $type, status: $status, distance: ${distanceMeters.toStringAsFixed(1)}m)';
 }

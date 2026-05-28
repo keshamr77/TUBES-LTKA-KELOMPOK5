@@ -3,7 +3,7 @@ import admin from 'firebase-admin';
 import { db } from '../config/firebase';
 import { isInRadius } from '../utils/haversine';
 import { requireAuth } from '../middleware/auth';
-import { isWithinSessionTime, formatToWIBString } from '../utils/time';
+import { isWithinSessionTime, formatToWIBString, getAttendanceWindow } from '../utils/time';
 
 const router = Router();
 
@@ -24,12 +24,29 @@ const USERS = 'users';
  * - Disimpan ke Firestore collection 'attendances'
  * - User ID sementara dari header 'X-Mock-User-Id' (Phase 3: dari Firebase Auth token)
  *
- * Body: { sessionId, latitude, longitude, selfieUrl }
+ * Body: { sessionId, latitude, longitude, selfieUrl, type? }
+ * type: 'check_in' (default) | 'check_out'
+ *
+ * Window waktu:
+ *   - check_in  hanya boleh di 15 menit awal sesi
+ *   - check_out hanya boleh di 15 menit akhir sesi
  */
 router.post('/', async (req: Request, res: Response) => {
   try {
     const { sessionId, latitude, longitude, selfieUrl } = req.body;
+    const type: string = req.body.type || 'check_in';
     const userId = req.userId!;
+
+    // === Validate type ===
+    if (type !== 'check_in' && type !== 'check_out') {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_PAYLOAD',
+          message: 'type harus "check_in" atau "check_out"',
+        },
+      });
+    }
 
     // === Validate payload ===
     if (
@@ -94,6 +111,33 @@ router.post('/', async (req: Request, res: Response) => {
       });
     }
 
+    // === Validasi window 15 menit ===
+    const window = getAttendanceWindow(
+      session.tanggal,
+      session.jamMulai,
+      session.jamSelesai,
+    );
+
+    if (type === 'check_in' && !window.allowCheckIn) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'OUTSIDE_CHECKIN_WINDOW',
+          message: 'Waktu absen masuk sudah lewat. Check-in hanya tersedia di 15 menit awal sesi.',
+        },
+      });
+    }
+
+    if (type === 'check_out' && !window.allowCheckOut) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'OUTSIDE_CHECKOUT_WINDOW',
+          message: 'Belum waktunya absen keluar. Check-out hanya tersedia di 15 menit akhir sesi.',
+        },
+      });
+    }
+
     // === Validasi geofencing (Haversine) pakai koordinat SESI ===
     if (
       typeof session.latitude !== 'number' ||
@@ -131,19 +175,42 @@ router.post('/', async (req: Request, res: Response) => {
       });
     }
 
-    // === Cek duplikat (sudah absen di sesi ini?) ===
+    // === Cek duplikat per type (sudah check-in / check-out di sesi ini?) ===
     const existing = await db
       .collection(ATTENDANCES)
       .where('sessionId', '==', sessionId)
       .where('userId', '==', userId)
+      .where('type', '==', type)
       .limit(1)
       .get();
 
     if (!existing.empty) {
+      const label = type === 'check_in' ? 'absen masuk' : 'absen keluar';
       return res.status(409).json({
         success: false,
-        error: { code: 'ALREADY_SUBMITTED', message: 'Anda sudah absen di sesi ini' },
+        error: { code: 'ALREADY_SUBMITTED', message: `Anda sudah melakukan ${label} di sesi ini` },
       });
+    }
+
+    // === Jika check_out, pastikan sudah check_in dulu ===
+    if (type === 'check_out') {
+      const checkInRecord = await db
+        .collection(ATTENDANCES)
+        .where('sessionId', '==', sessionId)
+        .where('userId', '==', userId)
+        .where('type', '==', 'check_in')
+        .limit(1)
+        .get();
+
+      if (checkInRecord.empty) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'CHECK_IN_REQUIRED',
+            message: 'Anda harus melakukan absen masuk terlebih dahulu sebelum absen keluar',
+          },
+        });
+      }
     }
 
     // === Lookup data user (nama & nim) dari collection 'users' ===
@@ -171,6 +238,7 @@ router.post('/', async (req: Request, res: Response) => {
     const newAttendance = {
       sessionId,
       userId,
+      type,
       nama: userNama,
       nim: userNim,
       namaKelas: session.namaKelas ?? null,
@@ -191,6 +259,7 @@ router.post('/', async (req: Request, res: Response) => {
       data: {
         attendanceId: docRef.id,
         sessionId,
+        type,
         nama: userNama,
         nim: userNim,
         distanceMeters,
@@ -238,6 +307,7 @@ router.get('/me', async (req: Request, res: Response) => {
             : new Date(a.timestamp);
         return {
           attendanceId: doc.id,
+          type: a.type ?? 'check_in',
           nama: a.nama ?? null,
           nim: a.nim ?? null,
           session: {
@@ -262,6 +332,81 @@ router.get('/me', async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       error: { code: 'INTERNAL_ERROR', message: 'Gagal memuat riwayat absensi' },
+    });
+  }
+});
+
+/**
+ * GET /api/attendances/me/status
+ * Cek status absensi user di sesi tertentu (sudah check-in? sudah check-out?).
+ *
+ * Query: ?sessionId=xxx
+ * Juga mengembalikan info window waktu saat ini.
+ */
+router.get('/me/status', async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const sessionId = req.query.sessionId as string;
+
+    if (!sessionId) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_PAYLOAD', message: 'sessionId query parameter wajib diisi' },
+      });
+    }
+
+    // Ambil data sesi untuk info window
+    const sessionDoc = await db.collection(SESSIONS).doc(sessionId).get();
+    let windowInfo = { allowCheckIn: false, allowCheckOut: false, reason: 'session_not_found' };
+    if (sessionDoc.exists) {
+      const session = sessionDoc.data() as Record<string, any>;
+      windowInfo = getAttendanceWindow(session.tanggal, session.jamMulai, session.jamSelesai);
+    }
+
+    // Query semua records untuk user ini di sesi ini
+    const snapshot = await db
+      .collection(ATTENDANCES)
+      .where('sessionId', '==', sessionId)
+      .where('userId', '==', userId)
+      .get();
+
+    let hasCheckedIn = false;
+    let hasCheckedOut = false;
+    let checkInTime: string | null = null;
+    let checkOutTime: string | null = null;
+
+    snapshot.docs.forEach((doc) => {
+      const data = doc.data() as Record<string, any>;
+      const ts = data.timestamp?.toDate?.() instanceof Date
+        ? data.timestamp.toDate()
+        : new Date(data.timestamp);
+
+      if (data.type === 'check_in' || (!data.type && !hasCheckedIn)) {
+        hasCheckedIn = true;
+        checkInTime = ts.toISOString();
+      }
+      if (data.type === 'check_out') {
+        hasCheckedOut = true;
+        checkOutTime = ts.toISOString();
+      }
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        sessionId,
+        hasCheckedIn,
+        hasCheckedOut,
+        checkInTime,
+        checkOutTime,
+        window: windowInfo,
+      },
+    });
+  } catch (error) {
+    console.error('[GET /attendances/me/status]', error);
+    return res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Gagal memuat status absensi' },
     });
   }
 });

@@ -69,6 +69,7 @@ class AttendanceService {
     required String sessionId,
     required double latitude,
     required double longitude,
+    String type = 'check_in',
     String selfieUrl = 'https://placeholder.com/selfie.jpg',
   }) async {
     final response = await _api.post(
@@ -77,6 +78,7 @@ class AttendanceService {
         'sessionId': sessionId,
         'latitude': latitude,
         'longitude': longitude,
+        'type': type,
         'selfieUrl': selfieUrl,
       },
     );
@@ -92,7 +94,9 @@ class AttendanceService {
 
       return AttendanceResult(
         success: true,
-        message: 'Absensi berhasil dicatat!',
+        message: type == 'check_in'
+            ? 'Absen masuk berhasil dicatat!'
+            : 'Absen keluar berhasil dicatat!',
         attendance: attendance,
       );
     }
@@ -104,6 +108,65 @@ class AttendanceService {
       errorCode: response.errorCode,
       distanceMeters: _extractDistance(response.data),
       allowedRadius: _extractAllowedRadius(response.data),
+    );
+  }
+
+  /// Kirim absensi keluar (check-out) ke server
+  Future<AttendanceResult> checkOut({
+    required String sessionId,
+    required double latitude,
+    required double longitude,
+    String selfieUrl = 'https://placeholder.com/selfie.jpg',
+  }) {
+    return submitAttendance(
+      sessionId: sessionId,
+      latitude: latitude,
+      longitude: longitude,
+      type: 'check_out',
+      selfieUrl: selfieUrl,
+    );
+  }
+
+  /// Cek status check-in & check-out user untuk sesi tertentu
+  /// GET /api/attendances/me/status?sessionId=xxx
+  Future<SessionStatusResult> getSessionStatus(String sessionId) async {
+    final response = await _api.get(
+      AppConstants.attendanceStatusEndpoint,
+      queryParams: {'sessionId': sessionId},
+    );
+
+    if (response.success && response.data != null) {
+      try {
+        final data = response.data!['data'] ?? {};
+        final window = data['window'] ?? {};
+
+        DateTime? parseTime(String? timeStr) {
+          if (timeStr == null) return null;
+          return DateTime.parse(timeStr).toLocal();
+        }
+
+        return SessionStatusResult(
+          success: true,
+          message: 'Berhasil memuat status absensi',
+          hasCheckedIn: data['hasCheckedIn'] ?? false,
+          hasCheckedOut: data['hasCheckedOut'] ?? false,
+          checkInTime: parseTime(data['checkInTime']?.toString()),
+          checkOutTime: parseTime(data['checkOutTime']?.toString()),
+          allowCheckIn: window['allowCheckIn'] ?? false,
+          allowCheckOut: window['allowCheckOut'] ?? false,
+          windowReason: window['reason']?.toString() ?? 'unknown',
+        );
+      } catch (e) {
+        return SessionStatusResult(
+          success: false,
+          message: 'Gagal memproses data status absensi: ${e.toString()}',
+        );
+      }
+    }
+
+    return SessionStatusResult(
+      success: false,
+      message: response.message,
     );
   }
 
@@ -164,7 +227,7 @@ class AttendanceService {
       case AppConstants.errorOutOfRadius:
         return 'Anda berada di luar radius area kampus.';
       case AppConstants.errorAlreadySubmitted:
-        return 'Anda sudah melakukan absensi untuk sesi ini.';
+        return 'Anda sudah melakukan absensi tipe ini untuk sesi ini.';
       case AppConstants.errorSessionClosed:
         return 'Sesi absensi sudah ditutup.';
       case AppConstants.errorSessionNotStarted:
@@ -173,6 +236,12 @@ class AttendanceService {
         return 'Anda tidak terdaftar di mata kuliah ini.';
       case AppConstants.errorInvalidPayload:
         return 'Data tidak lengkap atau tidak valid.';
+      case AppConstants.errorCheckInRequired:
+        return 'Anda harus melakukan absen masuk terlebih dahulu sebelum absen keluar.';
+      case AppConstants.errorOutsideCheckInWindow:
+        return 'Waktu absen masuk sudah lewat. Check-in hanya tersedia di 15 menit awal sesi.';
+      case AppConstants.errorOutsideCheckOutWindow:
+        return 'Belum waktunya absen keluar. Check-out hanya tersedia di 15 menit akhir sesi.';
       default:
         return fallback;
     }
@@ -248,5 +317,30 @@ class ActiveSessionsResult {
     required this.success,
     required this.message,
     required this.sessions,
+  });
+}
+
+/// Model hasil pembacaan status absensi sesi
+class SessionStatusResult {
+  final bool success;
+  final String message;
+  final bool hasCheckedIn;
+  final bool hasCheckedOut;
+  final DateTime? checkInTime;
+  final DateTime? checkOutTime;
+  final bool allowCheckIn;
+  final bool allowCheckOut;
+  final String windowReason;
+
+  const SessionStatusResult({
+    required this.success,
+    required this.message,
+    this.hasCheckedIn = false,
+    this.hasCheckedOut = false,
+    this.checkInTime,
+    this.checkOutTime,
+    this.allowCheckIn = false,
+    this.allowCheckOut = false,
+    this.windowReason = 'unknown',
   });
 }
