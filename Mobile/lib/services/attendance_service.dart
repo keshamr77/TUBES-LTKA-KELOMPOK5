@@ -225,7 +225,7 @@ class AttendanceService {
   String _mapErrorMessage(String errorCode, String fallback) {
     switch (errorCode) {
       case AppConstants.errorOutOfRadius:
-        return 'Anda berada di luar radius area kampus.';
+        return 'Anda berada di luar radius area kelas.';
       case AppConstants.errorAlreadySubmitted:
         return 'Anda sudah melakukan absensi tipe ini untuk sesi ini.';
       case AppConstants.errorSessionClosed:

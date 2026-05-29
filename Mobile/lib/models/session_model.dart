@@ -6,6 +6,7 @@ class SessionModel {
   final String courseName;
   final String kodeKelas;
   final String namaKelas;
+  final String? lokasiKelas;
   final DateTime startTime;
   final DateTime endTime;
   final double latitude;
@@ -17,6 +18,7 @@ class SessionModel {
     required this.courseName,
     required this.kodeKelas,
     required this.namaKelas,
+    this.lokasiKelas,
     required this.startTime,
     required this.endTime,
     required this.latitude,
@@ -61,6 +63,7 @@ class SessionModel {
       courseName: courseName,
       kodeKelas: kodeKelas,
       namaKelas: namaKelas,
+      lokasiKelas: json['lokasiKelas']?.toString(),
       startTime: startTime,
       endTime: endTime,
       latitude: (location?['latitude'] as num?)?.toDouble() ?? 0.0,

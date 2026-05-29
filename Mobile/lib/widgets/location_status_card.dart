@@ -118,7 +118,7 @@ class LocationStatusCard extends StatelessWidget {
         // Jarak
         _buildInfoRow(
           Icons.straighten,
-          'Jarak ke kampus',
+          'Jarak ke kelas',
           distance != null
               ? '${distance!.toStringAsFixed(0)} meter'
               : 'Menghitung...',
