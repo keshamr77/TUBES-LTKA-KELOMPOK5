@@ -498,6 +498,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
+  /// Refresh semua data: sesi aktif, status absensi, dan lokasi
+  Future<void> _refreshAll() async {
+    await _fetchActiveSession();
+    if (_latitude != null && _longitude != null) {
+      _recalculateLocationDetails(_latitude!, _longitude!);
+    }
+  }
+
   @override
   void dispose() {
     _locationService.stopPositionStream();
@@ -513,104 +521,110 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         height: double.infinity,
         decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
         child: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 20),
+          child: RefreshIndicator(
+            onRefresh: _refreshAll,
+            color: AppTheme.accentGreen,
+            backgroundColor: AppTheme.cardDark,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 20),
 
-                // Header greeting
-                _buildHeader(),
-                const SizedBox(height: 24),
+                  // Header greeting
+                  _buildHeader(),
+                  const SizedBox(height: 24),
 
-                // Waktu saat ini
-                _buildTimeCard(),
-                const SizedBox(height: 20),
+                  // Waktu saat ini
+                  _buildTimeCard(),
+                  const SizedBox(height: 20),
 
-                // Sesi Aktif Info
-                _buildSessionCard(),
-                const SizedBox(height: 20),
+                  // Sesi Aktif Info
+                  _buildSessionCard(),
+                  const SizedBox(height: 20),
 
-                // Kartu status lokasi (sembunyikan untuk WFH)
-                if (_activeSession == null || _activeSession!.locationRequired) ...[
-                  LocationStatusCard(
-                    latitude: _latitude,
-                    longitude: _longitude,
-                    distance: _distance,
-                    isWithinRadius: _isWithinRadius,
-                    isLoading: _isLocationLoading,
-                    radiusMeters: _activeSession?.radiusMeters ?? AppConstants.geofenceRadiusMeters,
-                  ),
-                  const SizedBox(height: 16),
-                ] else ...[
-                  // WFH banner
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: AppTheme.cardDark,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: const Color(0xFF2196F3).withOpacity(0.4),
-                        width: 1.5,
+                  // Kartu status lokasi (sembunyikan untuk WFH)
+                  if (_activeSession == null || _activeSession!.locationRequired) ...[
+                    LocationStatusCard(
+                      latitude: _latitude,
+                      longitude: _longitude,
+                      distance: _distance,
+                      isWithinRadius: _isWithinRadius,
+                      isLoading: _isLocationLoading,
+                      radiusMeters: _activeSession?.radiusMeters ?? AppConstants.geofenceRadiusMeters,
+                    ),
+                    const SizedBox(height: 16),
+                  ] else ...[
+                    // WFH banner
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: AppTheme.cardDark,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: const Color(0xFF2196F3).withOpacity(0.4),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Column(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2196F3).withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(30),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.home, color: Color(0xFF2196F3), size: 22),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Mode WFH 🏠',
+                                  style: TextStyle(
+                                    color: Color(0xFF2196F3),
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'Validasi GPS tidak diperlukan.\nAnda bisa absen dari mana saja.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: AppTheme.textSecondary,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    child: Column(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF2196F3).withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(30),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.home, color: Color(0xFF2196F3), size: 22),
-                              SizedBox(width: 8),
-                              Text(
-                                'Mode WFH 🏠',
-                                style: TextStyle(
-                                  color: Color(0xFF2196F3),
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'Validasi GPS tidak diperlukan.\nAnda bisa absen dari mana saja.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: AppTheme.textSecondary,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
+                    const SizedBox(height: 16),
+                  ],
+
+                  // Error lokasi
+                  if (_locationError != null && (_activeSession == null || _activeSession!.locationRequired)) _buildLocationError(),
+
+                  const SizedBox(height: 24),
+
+                  // Tombol Absen
+                  _buildCheckInButton(),
+
+                  // Status sudah absen
+                  if (_activeSession != null) ...[
+                    const SizedBox(height: 16),
+                    _buildCheckedInBanner(),
+                  ],
+
+                  const SizedBox(height: 32),
                 ],
-
-                // Error lokasi
-                if (_locationError != null && (_activeSession == null || _activeSession!.locationRequired)) _buildLocationError(),
-
-                const SizedBox(height: 24),
-
-                // Tombol Absen
-                _buildCheckInButton(),
-
-                // Status sudah absen
-                if (_activeSession != null) ...[
-                  const SizedBox(height: 16),
-                  _buildCheckedInBanner(),
-                ],
-
-                const SizedBox(height: 32),
-              ],
+              ),
             ),
           ),
         ),
@@ -668,6 +682,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ),
             ],
           ),
+        ),
+        // Refresh button
+        IconButton(
+          onPressed: _refreshAll,
+          icon: const Icon(
+            Icons.refresh_rounded,
+            color: AppTheme.textSecondary,
+            size: 24,
+          ),
+          tooltip: 'Refresh',
         ),
         // Avatar
         Container(
