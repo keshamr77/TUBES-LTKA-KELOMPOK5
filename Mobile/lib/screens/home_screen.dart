@@ -276,7 +276,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       final radius = _activeSession!.radiusMeters;
       final course = _activeSession!.courseName;
       _showWarningDialog(
-        'Di Luar Area Kampus',
+        'Di Luar Area Kelas',
         'Anda berada di luar radius ${radius.toInt()} meter dari $course. '
             'Silakan mendekat ke area lokasi kelas untuk melakukan absensi.',
         Icons.location_off,
@@ -332,7 +332,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       Color errorColor = AppTheme.accentRed;
 
       if (result.errorCode == AppConstants.errorOutOfRadius) {
-        errorTitle = 'Di Luar Radius Kampus';
+        errorTitle = 'Di Luar Radius Kelas';
         errorIcon = Icons.location_off;
         String msg = result.message;
         if (result.distanceMeters != null) {
@@ -793,7 +793,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               const SizedBox(width: 4),
               Expanded(
                 child: Text(
-                  'Lokasi Kelas: ${session.latitude.toStringAsFixed(5)}, ${session.longitude.toStringAsFixed(5)}',
+                  'Lokasi Kelas: ${session.lokasiKelas ?? '${session.latitude.toStringAsFixed(5)}, ${session.longitude.toStringAsFixed(5)}'}',
                   style: const TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 12,

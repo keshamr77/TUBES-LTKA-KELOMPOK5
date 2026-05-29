@@ -52,6 +52,7 @@ function formatSession(
     status: data.status ?? null,
     locationType,
     locationRequired,
+    lokasiKelas: data.lokasiKelas ?? null,
     // Untuk WFH, location boleh null (tidak dipakai validasi)
     location: locationRequired
       ? {
