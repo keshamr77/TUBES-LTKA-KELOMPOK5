@@ -176,6 +176,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     bool isWithin = false;
 
     if (_activeSession != null) {
+      // WFH: skip validasi GPS, langsung anggap dalam radius
+      if (!_activeSession!.locationRequired) {
+        setState(() {
+          _distance = 0;
+          _isWithinRadius = true;
+        });
+        return;
+      }
+
       distance = _locationService.distanceTo(
         lat,
         lng,
@@ -271,8 +280,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       return;
     }
 
-    // Cek lokasi dulu
-    if (!_isWithinRadius) {
+    // Cek lokasi dulu (skip untuk WFH)
+    if (_activeSession!.locationRequired && !_isWithinRadius) {
       final radius = _activeSession!.radiusMeters;
       final course = _activeSession!.courseName;
       _showWarningDialog(
@@ -523,19 +532,71 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 _buildSessionCard(),
                 const SizedBox(height: 20),
 
-                // Kartu status lokasi
-                LocationStatusCard(
-                  latitude: _latitude,
-                  longitude: _longitude,
-                  distance: _distance,
-                  isWithinRadius: _isWithinRadius,
-                  isLoading: _isLocationLoading,
-                  radiusMeters: _activeSession?.radiusMeters ?? AppConstants.geofenceRadiusMeters,
-                ),
-                const SizedBox(height: 16),
+                // Kartu status lokasi (sembunyikan untuk WFH)
+                if (_activeSession == null || _activeSession!.locationRequired) ...[
+                  LocationStatusCard(
+                    latitude: _latitude,
+                    longitude: _longitude,
+                    distance: _distance,
+                    isWithinRadius: _isWithinRadius,
+                    isLoading: _isLocationLoading,
+                    radiusMeters: _activeSession?.radiusMeters ?? AppConstants.geofenceRadiusMeters,
+                  ),
+                  const SizedBox(height: 16),
+                ] else ...[
+                  // WFH banner
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: AppTheme.cardDark,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: const Color(0xFF2196F3).withOpacity(0.4),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2196F3).withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.home, color: Color(0xFF2196F3), size: 22),
+                              SizedBox(width: 8),
+                              Text(
+                                'Mode WFH 🏠',
+                                style: TextStyle(
+                                  color: Color(0xFF2196F3),
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Validasi GPS tidak diperlukan.\nAnda bisa absen dari mana saja.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: AppTheme.textSecondary,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
 
                 // Error lokasi
-                if (_locationError != null) _buildLocationError(),
+                if (_locationError != null && (_activeSession == null || _activeSession!.locationRequired)) _buildLocationError(),
 
                 const SizedBox(height: 24),
 
@@ -793,7 +854,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               const SizedBox(width: 4),
               Expanded(
                 child: Text(
-                  'Lokasi Kelas: ${session.lokasiKelas ?? '${session.latitude.toStringAsFixed(5)}, ${session.longitude.toStringAsFixed(5)}'}',
+                  session.locationRequired
+                    ? 'Lokasi Kelas: ${session.lokasiKelas ?? '${session.latitude.toStringAsFixed(5)}, ${session.longitude.toStringAsFixed(5)}'}'
+                    : '🏠 WFH - Tanpa Validasi GPS',
                   style: const TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 12,
