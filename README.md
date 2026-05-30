@@ -1,13 +1,13 @@
-# Sistem Absensi GPS — Layanan Tersambung & Komputasi Awan (Kelompok 5)
+# Sistem Absensi GPS — ET 3204 Layanan Tersambung & Komputasi Awan (Kelompok 5)
 
 Sistem Absensi Mahasiswa berbasis Geofencing GPS (dan dukungan Mode WFH) untuk mata kuliah **ET3204 Layanan Tersambung dan Komputasi Awan**. Sistem ini memungkinkan dosen membuka sesi perkuliahan dengan koordinat lokasi tertentu, dan mahasiswa melakukan absensi (*check-in* & *check-out*) menggunakan perangkat seluler mereka. Jarak mahasiswa ke lokasi kelas dihitung secara *real-time* di sisi backend menggunakan formula **Haversine**.
 
 ---
 
 ## 👥 Anggota Kelompok 5
-1. **Rafly** — Cloud & Backend Engineer
-2. **Kesha** — Mobile Developer (Flutter)
-3. **Rekan ke-3** — Web & Dashboard Developer (React)
+1. **Rafly Nafisena Rahadian (18123003)** — Cloud & Backend Engineer
+2. **Kesha Mufrih Ramadhan (18123003)** — Mobile Developer (Flutter)
+3. **Fadhil Agly Hakim (18123005)** — Web & Dashboard Developer (React)
 
 ---
 
