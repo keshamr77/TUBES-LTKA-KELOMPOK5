@@ -5,9 +5,9 @@ Sistem Absensi Mahasiswa berbasis Geofencing GPS (dan dukungan Mode WFH) untuk m
 ---
 
 ## 👥 Anggota Kelompok 5
-1. **Rafly Nafisena Rahadian (18123003)** — Backend Engineer
+1. **Rafly Nafisena Rahadian (18123003)** — Backend Engineer (Node.js & Railway)
 2. **Kesha Mufrih Ramadhan (18123003)** — Mobile Developer (Flutter)
-3. **Fadhil Agly Hakim (18123005)** — Cloud & Dashboard Developer (React)
+3. **Fadhil Agly Hakim (18123005)** — Cloud & Dashboard Developer (Firebase & React)
 
 ---
 
