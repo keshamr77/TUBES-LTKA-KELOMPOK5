@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   collection, addDoc, onSnapshot, updateDoc,
-  deleteDoc, doc, serverTimestamp, query, orderBy
+  deleteDoc, doc, serverTimestamp, query, orderBy, getDocs
 } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { useTheme } from '../context/ThemeContext';
@@ -18,12 +18,14 @@ export default function KelolaSesi() {
   const { addToast } = useToast();
   const [sesiList, setSesiList] = useState([]);
   const [attendances, setAttendances] = useState([]);
+  const [courses, setCourses] = useState([]);
+  const [courseStudentsMap, setCourseStudentsMap] = useState({}); // { courseId: [{nim, nama}] }
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [modal, setModal] = useState(null); // { type: 'tutup'|'hapus', sesiId, sesiNama }
   const [form, setForm] = useState({
-    namaKelas: '', kodeKelas: '',
+    courseId: '', namaKelas: '', kodeKelas: '',
     tanggal: new Date().toISOString().split('T')[0],
     jamMulai: '', jamSelesai: '', radius: '100',
     modePilihan: 'kelas', lokasiKelas: 'LTRGM',
@@ -37,7 +39,7 @@ export default function KelolaSesi() {
   const inputBg = dark ? '#111' : '#fff';
 
   // Helper: hitung statistik per sesi dari data attendances
-  const getSessionStats = useCallback((sessionId, jumlahMhs) => {
+  const getSessionStats = useCallback((sessionId, jumlahMhs, courseId) => {
     // Filter attendances untuk sesi ini, hanya check_in (bukan check_out)
     const sesiAttendances = attendances.filter(
       a => a.sessionId === sessionId && a.type !== 'check_out'
@@ -63,11 +65,19 @@ export default function KelolaSesi() {
     const hadir = uniqueList.filter(a => normalizeStatus(a.status) === 'hadir').length;
     const terlambat = uniqueList.filter(a => normalizeStatus(a.status) === 'terlambat').length;
     const totalHadir = hadir + terlambat;
-    const total = parseInt(jumlahMhs) || 0;
+
+    // Jika ada courseId dan student list, hitung absen dari daftar terdaftar
+    const courseStudents = courseId ? (courseStudentsMap[courseId] || []) : [];
+    let total;
+    if (courseStudents.length > 0) {
+      total = courseStudents.length;
+    } else {
+      total = parseInt(jumlahMhs) || 0;
+    }
     const absen = total > 0 ? Math.max(0, total - totalHadir) : 0;
 
-    return { hadir, terlambat, absen };
-  }, [attendances]);
+    return { hadir, terlambat, absen, total };
+  }, [attendances, courseStudentsMap]);
 
   // Realtime listener untuk attendances
   useEffect(() => {
@@ -77,6 +87,30 @@ export default function KelolaSesi() {
     });
     return () => unsub();
   }, []);
+
+  // Realtime listener untuk courses
+  useEffect(() => {
+    const q = query(collection(db, 'courses'), orderBy('createdAt', 'desc'));
+    const unsub = onSnapshot(q, (snap) => {
+      const email = auth.currentUser?.email;
+      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setCourses(email ? data.filter(c => c.dosenEmail === email) : data);
+    });
+    return () => unsub();
+  }, []);
+
+  // Load students for courses that have sessions (for stats)
+  useEffect(() => {
+    const courseIds = [...new Set(sesiList.map(s => s.courseId).filter(Boolean))];
+    courseIds.forEach(async (cid) => {
+      if (courseStudentsMap[cid]) return; // already loaded
+      try {
+        const snap = await getDocs(collection(db, 'courses', cid, 'students'));
+        const students = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setCourseStudentsMap(prev => ({ ...prev, [cid]: students }));
+      } catch (e) { /* ignore */ }
+    });
+  }, [sesiList, courseStudentsMap]);
 
   // Realtime listener + auto close
   useEffect(() => {
@@ -128,12 +162,13 @@ export default function KelolaSesi() {
         locationType: isKelas ? 'smart_classroom' : 'wfh',
         locationRequired: isKelas,
         jumlahMahasiswa: parseInt(form.jumlahMahasiswa) || 0,
+        courseId: form.courseId || null,
         status: 'open',
         dosenEmail: auth.currentUser?.email,
         createdAt: serverTimestamp(),
       });
       setFormOpen(false);
-      setForm({ namaKelas: '', kodeKelas: '', tanggal: new Date().toISOString().split('T')[0], jamMulai: '', jamSelesai: '', radius: '100', modePilihan: 'kelas', lokasiKelas: 'LTRGM', jumlahMahasiswa: '' });
+      setForm({ courseId: '', namaKelas: '', kodeKelas: '', tanggal: new Date().toISOString().split('T')[0], jamMulai: '', jamSelesai: '', radius: '100', modePilihan: 'kelas', lokasiKelas: 'LTRGM', jumlahMahasiswa: '' });
       addToast('Sesi berhasil dibuat!', 'success');
     } catch (err) {
       addToast('Gagal membuat sesi: ' + err.message, 'error');
@@ -227,6 +262,38 @@ export default function KelolaSesi() {
         <div style={{ background: bg, borderRadius: '12px', border: `0.5px solid ${border}`, padding: '20px 24px', marginBottom: '20px' }}>
           <h3 style={{ fontSize: '15px', fontWeight: '600', marginBottom: '16px', color: text }}>Buat Sesi Baru</h3>
 
+          {/* Pilih Mata Kuliah */}
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: sub, marginBottom: '6px' }}>Mata Kuliah</label>
+            <select
+              style={inputStyle}
+              value={form.courseId}
+              onChange={e => {
+                const cid = e.target.value;
+                if (!cid) {
+                  setForm({ ...form, courseId: '', namaKelas: '', kodeKelas: '', jumlahMahasiswa: '' });
+                  return;
+                }
+                const c = courses.find(x => x.id === cid);
+                if (c) {
+                  setForm({ ...form, courseId: cid, namaKelas: c.nama, kodeKelas: c.kode || '', jumlahMahasiswa: String(c.jumlahMahasiswa || 0) });
+                }
+              }}
+            >
+              <option value="">— Tanpa Mata Kuliah (input manual) —</option>
+              {courses.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.nama} {c.kode ? `(${c.kode})` : ''} · {c.jumlahMahasiswa || 0} mahasiswa
+                </option>
+              ))}
+            </select>
+            {courses.length === 0 && (
+              <p style={{ fontSize: '11px', color: '#f57f17', marginTop: '6px', fontStyle: 'italic' }}>
+                Belum ada mata kuliah. Buat dulu di tab 📚 Mata Kuliah.
+              </p>
+            )}
+          </div>
+
           {/* Mode Pilihan: Kelas / WFH */}
           <div style={{ marginBottom: '16px' }}>
             <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: sub, marginBottom: '8px' }}>Mode Kehadiran *</label>
@@ -254,21 +321,25 @@ export default function KelolaSesi() {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
             {[
-              { label: 'Nama Kelas *', key: 'namaKelas', placeholder: 'Layanan Tersambung & Komputasi Awan', type: 'text' },
-              { label: 'Kode Kelas', key: 'kodeKelas', placeholder: 'IF-43-01', type: 'text' },
+              { label: 'Nama Kelas *', key: 'namaKelas', placeholder: 'Layanan Tersambung & Komputasi Awan', type: 'text', readOnly: !!form.courseId },
+              { label: 'Kode Kelas', key: 'kodeKelas', placeholder: 'IF-43-01', type: 'text', readOnly: !!form.courseId },
               { label: 'Tanggal *', key: 'tanggal', type: 'date' },
               { label: 'Jam Mulai *', key: 'jamMulai', type: 'time' },
               { label: 'Jam Selesai *', key: 'jamSelesai', type: 'time' },
-              { label: 'Jumlah Mahasiswa *', key: 'jumlahMahasiswa', placeholder: 'Contoh: 40', type: 'number' },
+              { label: 'Jumlah Mahasiswa *', key: 'jumlahMahasiswa', placeholder: 'Contoh: 40', type: 'number', readOnly: !!form.courseId },
             ].map(f => (
               <div key={f.key}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: sub, marginBottom: '6px' }}>{f.label}</label>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: sub, marginBottom: '6px' }}>
+                  {f.label}
+                  {f.readOnly && <span style={{ fontSize: '10px', color: '#1a73e8', marginLeft: '6px' }}>auto</span>}
+                </label>
                 <input
-                  style={inputStyle}
+                  style={{ ...inputStyle, ...(f.readOnly ? { opacity: 0.7, cursor: 'not-allowed' } : {}) }}
                   type={f.type}
                   placeholder={f.placeholder}
                   value={form[f.key]}
-                  onChange={e => setForm({ ...form, [f.key]: e.target.value })}
+                  readOnly={f.readOnly}
+                  onChange={e => !f.readOnly && setForm({ ...form, [f.key]: e.target.value })}
                 />
               </div>
             ))}
@@ -360,8 +431,7 @@ export default function KelolaSesi() {
 
                 {/* Statistik */}
                 {(() => {
-                  const stats = getSessionStats(sesi.id, sesi.jumlahMahasiswa);
-                  const totalMhs = parseInt(sesi.jumlahMahasiswa) || 0;
+                  const stats = getSessionStats(sesi.id, sesi.jumlahMahasiswa, sesi.courseId);
                   return (
                     <>
                       <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
@@ -376,12 +446,13 @@ export default function KelolaSesi() {
                           </div>
                         ))}
                       </div>
-                      {totalMhs > 0 && (
+                      {stats.total > 0 && (
                         <div style={{ fontSize: '11px', color: sub, marginBottom: '14px', textAlign: 'center' }}>
-                          👥 Total mahasiswa: {totalMhs} · Terisi: {stats.hadir + stats.terlambat}/{totalMhs}
+                          👥 Total mahasiswa: {stats.total} · Terisi: {stats.hadir + stats.terlambat}/{stats.total}
+                          {sesi.courseId && <span style={{ marginLeft: '4px', color: '#1a73e8' }}>(dari mata kuliah)</span>}
                         </div>
                       )}
-                      {totalMhs === 0 && (
+                      {stats.total === 0 && (
                         <div style={{ fontSize: '11px', color: '#f57f17', marginBottom: '14px', textAlign: 'center', fontStyle: 'italic' }}>
                           ⚠️ Jumlah mahasiswa belum diset — angka absen tidak bisa dihitung
                         </div>

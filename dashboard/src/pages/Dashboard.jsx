@@ -4,6 +4,7 @@ import { auth } from '../firebase';
 import { useTheme } from '../context/ThemeContext';
 import TabelAbsensi from '../components/TabelAbsensi';
 import KelolaSesi from '../components/KelolaSesi';
+import KelolaMataKuliah from '../components/KelolaMataKuliah';
 
 export default function Dashboard() {
   const user = auth.currentUser;
@@ -59,7 +60,7 @@ export default function Dashboard() {
 
         {/* Tabs */}
         <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
-          {[['sesi', '🗓️ Kelola Sesi'], ['absensi', '📋 Rekap Absensi']].map(([key, label]) => (
+          {[['sesi', '📅️ Kelola Sesi'], ['absensi', '📋 Rekap Absensi'], ['matkul', '📚 Mata Kuliah']].map(([key, label]) => (
             <button
               key={key}
               onClick={() => setActiveTab(key)}
@@ -77,6 +78,7 @@ export default function Dashboard() {
 
         {activeTab === 'sesi' && <KelolaSesi />}
         {activeTab === 'absensi' && <TabelAbsensi />}
+        {activeTab === 'matkul' && <KelolaMataKuliah />}
       </div>
     </div>
   );
