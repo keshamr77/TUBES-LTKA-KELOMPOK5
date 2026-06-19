@@ -17,6 +17,7 @@ export default function KelolaSesi() {
   const { dark } = useTheme();
   const { addToast } = useToast();
   const [sesiList, setSesiList] = useState([]);
+  const [attendances, setAttendances] = useState([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -26,6 +27,7 @@ export default function KelolaSesi() {
     tanggal: new Date().toISOString().split('T')[0],
     jamMulai: '', jamSelesai: '', radius: '100',
     modePilihan: 'kelas', lokasiKelas: 'LTRGM',
+    jumlahMahasiswa: '',
   });
 
   const bg = dark ? '#1a1a1a' : '#fff';
@@ -33,6 +35,48 @@ export default function KelolaSesi() {
   const text = dark ? '#f0f0f0' : '#1a1a1a';
   const sub = dark ? '#888' : '#666';
   const inputBg = dark ? '#111' : '#fff';
+
+  // Helper: hitung statistik per sesi dari data attendances
+  const getSessionStats = useCallback((sessionId, jumlahMhs) => {
+    // Filter attendances untuk sesi ini, hanya check_in (bukan check_out)
+    const sesiAttendances = attendances.filter(
+      a => a.sessionId === sessionId && a.type !== 'check_out'
+    );
+
+    // Deduplicate per NIM — ambil status terakhir tiap mahasiswa
+    const perMhs = {};
+    sesiAttendances.forEach(a => {
+      const key = a.nim || a.nama || a.id; // fallback jika nim kosong
+      // Simpan yang terakhir (attendances sudah sorted desc by timestamp)
+      if (!perMhs[key]) perMhs[key] = a;
+    });
+
+    const uniqueList = Object.values(perMhs);
+    const normalizeStatus = (s) => {
+      if (!s) return 'hadir';
+      if (s === 'present' || s === 'hadir') return 'hadir';
+      if (s === 'late' || s === 'terlambat') return 'terlambat';
+      if (s === 'absent' || s === 'tidak hadir') return 'tidak hadir';
+      return s;
+    };
+
+    const hadir = uniqueList.filter(a => normalizeStatus(a.status) === 'hadir').length;
+    const terlambat = uniqueList.filter(a => normalizeStatus(a.status) === 'terlambat').length;
+    const totalHadir = hadir + terlambat;
+    const total = parseInt(jumlahMhs) || 0;
+    const absen = total > 0 ? Math.max(0, total - totalHadir) : 0;
+
+    return { hadir, terlambat, absen };
+  }, [attendances]);
+
+  // Realtime listener untuk attendances
+  useEffect(() => {
+    const q = query(collection(db, 'attendances'), orderBy('timestamp', 'desc'));
+    const unsub = onSnapshot(q, (snap) => {
+      setAttendances(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+    return () => unsub();
+  }, []);
 
   // Realtime listener + auto close
   useEffect(() => {
@@ -79,18 +123,17 @@ export default function KelolaSesi() {
         radius: isKelas ? parseInt(form.radius) : 0,
         latitude: checkpoint ? checkpoint.lat : null,
         longitude: checkpoint ? checkpoint.lng : null,
-        // Field lama (dashboard UI)
         modePilihan: form.modePilihan,
         lokasiKelas: isKelas ? form.lokasiKelas : null,
-        // Field baru (backend locationType compat)
         locationType: isKelas ? 'smart_classroom' : 'wfh',
         locationRequired: isKelas,
+        jumlahMahasiswa: parseInt(form.jumlahMahasiswa) || 0,
         status: 'open',
         dosenEmail: auth.currentUser?.email,
         createdAt: serverTimestamp(),
       });
       setFormOpen(false);
-      setForm({ namaKelas: '', kodeKelas: '', tanggal: new Date().toISOString().split('T')[0], jamMulai: '', jamSelesai: '', radius: '100', modePilihan: 'kelas', lokasiKelas: 'LTRGM' });
+      setForm({ namaKelas: '', kodeKelas: '', tanggal: new Date().toISOString().split('T')[0], jamMulai: '', jamSelesai: '', radius: '100', modePilihan: 'kelas', lokasiKelas: 'LTRGM', jumlahMahasiswa: '' });
       addToast('Sesi berhasil dibuat!', 'success');
     } catch (err) {
       addToast('Gagal membuat sesi: ' + err.message, 'error');
@@ -216,6 +259,7 @@ export default function KelolaSesi() {
               { label: 'Tanggal *', key: 'tanggal', type: 'date' },
               { label: 'Jam Mulai *', key: 'jamMulai', type: 'time' },
               { label: 'Jam Selesai *', key: 'jamSelesai', type: 'time' },
+              { label: 'Jumlah Mahasiswa *', key: 'jumlahMahasiswa', placeholder: 'Contoh: 40', type: 'number' },
             ].map(f => (
               <div key={f.key}>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: sub, marginBottom: '6px' }}>{f.label}</label>
@@ -315,18 +359,36 @@ export default function KelolaSesi() {
                 </div>
 
                 {/* Statistik */}
-                <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
-                  {[
-                    { label: 'Hadir', val: sesi.statHadir ?? 0, color: '#2e7d32', bg: '#e8f5e9' },
-                    { label: 'Terlambat', val: sesi.statTerlambat ?? 0, color: '#f57f17', bg: '#fff8e1' },
-                    { label: 'Absen', val: sesi.statAbsen ?? 0, color: '#c62828', bg: '#ffebee' },
-                  ].map(s => (
-                    <div key={s.label} style={{ flex: 1, background: s.bg, borderRadius: '8px', padding: '8px', textAlign: 'center' }}>
-                      <div style={{ fontSize: '18px', fontWeight: '600', color: s.color }}>{s.val}</div>
-                      <div style={{ fontSize: '10px', color: s.color }}>{s.label}</div>
-                    </div>
-                  ))}
-                </div>
+                {(() => {
+                  const stats = getSessionStats(sesi.id, sesi.jumlahMahasiswa);
+                  const totalMhs = parseInt(sesi.jumlahMahasiswa) || 0;
+                  return (
+                    <>
+                      <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                        {[
+                          { label: 'Hadir', val: stats.hadir, color: '#2e7d32', bg: '#e8f5e9' },
+                          { label: 'Terlambat', val: stats.terlambat, color: '#f57f17', bg: '#fff8e1' },
+                          { label: 'Absen', val: stats.absen, color: '#c62828', bg: '#ffebee' },
+                        ].map(s => (
+                          <div key={s.label} style={{ flex: 1, background: s.bg, borderRadius: '8px', padding: '8px', textAlign: 'center' }}>
+                            <div style={{ fontSize: '18px', fontWeight: '600', color: s.color }}>{s.val}</div>
+                            <div style={{ fontSize: '10px', color: s.color }}>{s.label}</div>
+                          </div>
+                        ))}
+                      </div>
+                      {totalMhs > 0 && (
+                        <div style={{ fontSize: '11px', color: sub, marginBottom: '14px', textAlign: 'center' }}>
+                          👥 Total mahasiswa: {totalMhs} · Terisi: {stats.hadir + stats.terlambat}/{totalMhs}
+                        </div>
+                      )}
+                      {totalMhs === 0 && (
+                        <div style={{ fontSize: '11px', color: '#f57f17', marginBottom: '14px', textAlign: 'center', fontStyle: 'italic' }}>
+                          ⚠️ Jumlah mahasiswa belum diset — angka absen tidak bisa dihitung
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
 
                 {/* Actions */}
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
