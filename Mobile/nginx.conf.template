@@ -1,0 +1,30 @@
+server {
+    listen $PORT;
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Gzip compression for Flutter web assets
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript application/wasm;
+    gzip_min_length 256;
+
+    # SPA routing: semua path yang tidak ditemukan diarahkan ke index.html
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Cache static assets (JS, CSS, fonts, images)
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot|wasm)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # Jangan cache index.html (agar update Flutter app langsung terlihat)
+    location = /index.html {
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+        add_header Pragma "no-cache";
+        add_header Expires "0";
+    }
+}

@@ -1,0 +1,21 @@
+# Exclude heavy directories that are not needed for web build
+build/
+.dart_tool/
+.pub-cache/
+.pub/
+android/app/debug
+android/app/profile
+android/app/release
+node_modules/
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/

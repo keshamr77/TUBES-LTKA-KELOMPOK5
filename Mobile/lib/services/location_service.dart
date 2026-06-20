@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:geolocator/geolocator.dart';
 import 'package:absensi_lokasi/config/constants.dart';
 
@@ -19,6 +20,15 @@ class LocationService {
   /// Memeriksa dan meminta izin lokasi
   /// Returns true jika izin diberikan, false jika ditolak
   Future<LocationPermissionResult> checkAndRequestPermission() async {
+    // Di web, browser akan menampilkan prompt permission sendiri
+    // saat getCurrentPosition() dipanggil. Skip native checks.
+    if (kIsWeb) {
+      return LocationPermissionResult(
+        granted: true,
+        message: 'Browser akan meminta izin lokasi secara otomatis.',
+      );
+    }
+
     bool serviceEnabled;
     LocationPermission permission;
 

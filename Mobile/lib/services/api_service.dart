@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
@@ -76,11 +75,11 @@ class ApiService {
       debugPrint('[ApiService GET] Status: ${response.statusCode}');
       debugPrint('[ApiService GET] Body: ${response.body.length > 500 ? response.body.substring(0, 500) : response.body}');
       return _handleResponse(response);
-    } on SocketException {
-      return ApiResponse.networkError();
-    } on HttpException {
-      return ApiResponse.serverError();
     } catch (e) {
+      final msg = e.toString().toLowerCase();
+      if (msg.contains('socketexception') || msg.contains('networkerror') || msg.contains('xmlhttprequest') || msg.contains('failed to fetch')) {
+        return ApiResponse.networkError();
+      }
       return ApiResponse(
         success: false,
         message: 'Terjadi kesalahan: ${e.toString()}',
@@ -103,11 +102,11 @@ class ApiService {
           .timeout(const Duration(seconds: 30));
 
       return _handleResponse(response);
-    } on SocketException {
-      return ApiResponse.networkError();
-    } on HttpException {
-      return ApiResponse.serverError();
     } catch (e) {
+      final msg = e.toString().toLowerCase();
+      if (msg.contains('socketexception') || msg.contains('networkerror') || msg.contains('xmlhttprequest') || msg.contains('failed to fetch')) {
+        return ApiResponse.networkError();
+      }
       return ApiResponse(
         success: false,
         message: 'Terjadi kesalahan: ${e.toString()}',

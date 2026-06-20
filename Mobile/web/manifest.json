@@ -1,11 +1,11 @@
 {
-    "name": "temp_project",
-    "short_name": "temp_project",
+    "name": "Absensi GPS — Sistem Absensi Berbasis Lokasi",
+    "short_name": "Absensi GPS",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#1A1D2E",
+    "theme_color": "#1A1D2E",
+    "description": "Sistem Absensi Mahasiswa Berbasis GPS dengan Geofencing — Kelompok 5 LTKA (ET3204)",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
