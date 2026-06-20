@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../firebase';
+import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '../firebase';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -12,7 +13,15 @@ export default function Login() {
     setLoading(true);
     setError('');
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+      // F1: Validasi role — hanya dosen yang boleh masuk
+      const userDoc = await getDoc(doc(db, 'users', cred.user.uid));
+      if (!userDoc.exists() || userDoc.data()?.role !== 'dosen') {
+        await signOut(auth);
+        setError('Akses ditolak. Hanya dosen yang bisa login ke dashboard.');
+        setLoading(false);
+        return;
+      }
     } catch (err) {
       setError('Email atau password salah.');
     }
