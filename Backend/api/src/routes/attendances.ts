@@ -4,16 +4,16 @@ import { db } from '../config/firebase';
 import { isInRadius } from '../utils/haversine';
 import { requireAuth } from '../middleware/auth';
 import { isWithinSessionTime, formatToWIBString, getAttendanceWindow } from '../utils/time';
- 
+
 const router = Router();
- 
+
 // Semua route di file ini membutuhkan autentikasi
 router.use(requireAuth);
- 
+
 const ATTENDANCES = 'attendances';
 const SESSIONS = 'sessions';
 const USERS = 'users';
- 
+
 /**
  * POST /api/attendances
  * Submit absensi dengan validasi geofencing (Haversine) + validasi waktu sesi.
@@ -34,7 +34,7 @@ router.post('/', async (req: Request, res: Response) => {
     const { sessionId, latitude, longitude, selfieUrl } = req.body;
     const type: string = req.body.type || 'check_in';
     const userId = req.userId!;
- 
+
     // === Validate type ===
     if (type !== 'check_in' && type !== 'check_out') {
       return res.status(400).json({
@@ -45,7 +45,7 @@ router.post('/', async (req: Request, res: Response) => {
         },
       });
     }
- 
+
     // === Validate payload dasar (sessionId & selfieUrl selalu wajib) ===
     if (!sessionId || !selfieUrl) {
       return res.status(400).json({
@@ -56,7 +56,7 @@ router.post('/', async (req: Request, res: Response) => {
         },
       });
     }
- 
+
     // === Ambil dokumen sesi (perlu lebih awal untuk tahu butuh lokasi atau tidak) ===
     const sessionDoc = await db.collection(SESSIONS).doc(sessionId).get();
     if (!sessionDoc.exists) {
@@ -66,14 +66,14 @@ router.post('/', async (req: Request, res: Response) => {
       });
     }
     const session = sessionDoc.data() as Record<string, any>;
- 
+
     // Tentukan apakah sesi ini butuh validasi lokasi.
     // Default true (smart_classroom) untuk sesi lama yang belum punya field ini.
     const locationRequired: boolean =
       typeof session.locationRequired === 'boolean'
         ? session.locationRequired
         : (session.locationType ?? 'smart_classroom') !== 'wfh';
- 
+
     // === Validasi koordinat: wajib HANYA kalau sesi butuh lokasi ===
     if (locationRequired) {
       if (typeof latitude !== 'number' || typeof longitude !== 'number') {
@@ -92,7 +92,7 @@ router.post('/', async (req: Request, res: Response) => {
         });
       }
     }
- 
+
     // === Validasi status sesi ===
     if (session.status !== 'open') {
       return res.status(410).json({
@@ -100,7 +100,7 @@ router.post('/', async (req: Request, res: Response) => {
         error: { code: 'SESSION_CLOSED', message: 'Sesi sudah ditutup' },
       });
     }
- 
+
     // === Validasi waktu sesi (soft auto-close) ===
     const timeStatus = isWithinSessionTime(
       session.tanggal,
@@ -121,14 +121,14 @@ router.post('/', async (req: Request, res: Response) => {
         error: { code, message },
       });
     }
- 
+
     // === Validasi window 15 menit (tetap berlaku untuk SEMUA tipe, termasuk WFH) ===
     const window = getAttendanceWindow(
       session.tanggal,
       session.jamMulai,
       session.jamSelesai,
     );
- 
+
     if (type === 'check_in' && !window.allowCheckIn) {
       return res.status(403).json({
         success: false,
@@ -138,7 +138,7 @@ router.post('/', async (req: Request, res: Response) => {
         },
       });
     }
- 
+
     if (type === 'check_out' && !window.allowCheckOut) {
       return res.status(403).json({
         success: false,
@@ -148,10 +148,10 @@ router.post('/', async (req: Request, res: Response) => {
         },
       });
     }
- 
+
     // === Validasi geofencing (Haversine) — HANYA kalau sesi butuh lokasi ===
     let distanceMeters: number | null = null;
- 
+
     if (locationRequired) {
       if (
         typeof session.latitude !== 'number' ||
@@ -166,7 +166,7 @@ router.post('/', async (req: Request, res: Response) => {
           },
         });
       }
- 
+
       const result = isInRadius(
         latitude,
         longitude,
@@ -175,7 +175,7 @@ router.post('/', async (req: Request, res: Response) => {
         session.radius,
       );
       distanceMeters = result.distanceMeters;
- 
+
       if (!result.inRadius) {
         return res.status(403).json({
           success: false,
@@ -191,35 +191,32 @@ router.post('/', async (req: Request, res: Response) => {
       }
     }
     // Kalau WFH (locationRequired = false): skip semua validasi lokasi di atas.
- 
+
+    // === [R2] Deterministic document ID: {sessionId}_{userId}_{type} ===
+    // ID dibentuk dari kombinasi sesi+user+tipe, jadi mustahil ada duplikat
+    // di level database (idempotent). Kalau submit 2x, dokumen kedua menimpa
+    // yang pertama alih-alih bikin baru.
+    const attendanceDocId = `${sessionId}_${userId}_${type}`;
+    const attendanceRef = db.collection(ATTENDANCES).doc(attendanceDocId);
+
     // === Cek duplikat per type (sudah check-in / check-out di sesi ini?) ===
-    const existing = await db
-      .collection(ATTENDANCES)
-      .where('sessionId', '==', sessionId)
-      .where('userId', '==', userId)
-      .where('type', '==', type)
-      .limit(1)
-      .get();
- 
-    if (!existing.empty) {
+    // Sekarang cukup cek 1 dokumen by ID (bukan query) — lebih cepat & akurat.
+    const existingDoc = await attendanceRef.get();
+    if (existingDoc.exists) {
       const label = type === 'check_in' ? 'absen masuk' : 'absen keluar';
       return res.status(409).json({
         success: false,
         error: { code: 'ALREADY_SUBMITTED', message: `Anda sudah melakukan ${label} di sesi ini` },
       });
     }
- 
+
     // === Jika check_out, pastikan sudah check_in dulu ===
+    // Pakai deterministic ID juga: cek dokumen check_in by ID.
     if (type === 'check_out') {
-      const checkInRecord = await db
-        .collection(ATTENDANCES)
-        .where('sessionId', '==', sessionId)
-        .where('userId', '==', userId)
-        .where('type', '==', 'check_in')
-        .limit(1)
-        .get();
- 
-      if (checkInRecord.empty) {
+      const checkInDocId = `${sessionId}_${userId}_check_in`;
+      const checkInDoc = await db.collection(ATTENDANCES).doc(checkInDocId).get();
+
+      if (!checkInDoc.exists) {
         return res.status(400).json({
           success: false,
           error: {
@@ -229,7 +226,7 @@ router.post('/', async (req: Request, res: Response) => {
         });
       }
     }
- 
+
     // === Lookup data user (nama & nim) dari collection 'users' ===
     let userNama: string | null = null;
     let userNim: string | null = null;
@@ -245,7 +242,7 @@ router.post('/', async (req: Request, res: Response) => {
     } catch (lookupErr) {
       console.error('[POST /attendances] Gagal lookup user:', lookupErr);
     }
- 
+
     // === Simpan absensi ke Firestore ===
     const now = new Date();
     const newAttendance: Record<string, any> = {
@@ -263,7 +260,7 @@ router.post('/', async (req: Request, res: Response) => {
       timestamp: now,
       waktu: formatToWIBString(now),
     };
- 
+
     // Simpan koordinat HANYA kalau sesi butuh lokasi (WFH tidak menyimpan koordinat)
     if (locationRequired) {
       newAttendance.latitude = latitude;
@@ -272,13 +269,14 @@ router.post('/', async (req: Request, res: Response) => {
       newAttendance.latitude = null;
       newAttendance.longitude = null;
     }
- 
-    const docRef = await db.collection(ATTENDANCES).add(newAttendance);
- 
+
+    // [R2] Pakai .set() dengan ID deterministik (bukan .add() yang ID random)
+    await attendanceRef.set(newAttendance);
+
     return res.status(201).json({
       success: true,
       data: {
-        attendanceId: docRef.id,
+        attendanceId: attendanceDocId,
         sessionId,
         type,
         nama: userNama,
@@ -297,27 +295,34 @@ router.post('/', async (req: Request, res: Response) => {
     });
   }
 });
- 
+
 /**
  * GET /api/attendances/me
  * Riwayat absensi user yang lagi login.
+ *
+ * [R1] Query pakai orderBy('timestamp','desc').limit() langsung di Firestore,
+ * bukan sort+slice di memori. Lebih efisien — Firestore cuma kirim N dokumen
+ * terbaru, bukan semua. (Butuh composite index userId + timestamp.)
  */
 router.get('/me', async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
     const limit = Math.min(parseInt(req.query.limit as string, 10) || 20, 50);
- 
+
     console.log(`[GET /attendances/me] userId="${userId}", limit=${limit}`);
- 
+
+    // [R1] Sort & limit dilakukan di Firestore (server-side), bukan di memori.
     const snapshot = await db
       .collection(ATTENDANCES)
       .where('userId', '==', userId)
+      .orderBy('timestamp', 'desc')
+      .limit(limit)
       .get();
- 
+
     console.log(`[GET /attendances/me] Found ${snapshot.size} documents for userId="${userId}"`);
- 
-    const attendances = snapshot.docs
-      .map((doc: admin.firestore.QueryDocumentSnapshot) => {
+
+    const attendances = snapshot.docs.map(
+      (doc: admin.firestore.QueryDocumentSnapshot) => {
         const a = doc.data() as Record<string, any>;
         const ts =
           a.timestamp?.toDate?.() instanceof Date
@@ -338,13 +343,10 @@ router.get('/me', async (req: Request, res: Response) => {
           latitude: a.latitude ?? null,
           longitude: a.longitude ?? null,
           distanceMeters: a.distanceMeters ?? null,
-          _sortTs: ts.getTime(),
         };
-      })
-      .sort((x, y) => y._sortTs - x._sortTs)
-      .slice(0, limit)
-      .map(({ _sortTs, ...rest }) => rest);
- 
+      },
+    );
+
     return res.json({ success: true, data: attendances });
   } catch (error) {
     console.error('[GET /attendances/me]', error);
@@ -354,7 +356,7 @@ router.get('/me', async (req: Request, res: Response) => {
     });
   }
 });
- 
+
 /**
  * GET /api/attendances/me/status
  * Cek status absensi user di sesi tertentu (sudah check-in? sudah check-out?).
@@ -363,48 +365,49 @@ router.get('/me/status', async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
     const sessionId = req.query.sessionId as string;
- 
+
     if (!sessionId) {
       return res.status(400).json({
         success: false,
         error: { code: 'INVALID_PAYLOAD', message: 'sessionId query parameter wajib diisi' },
       });
     }
- 
+
     const sessionDoc = await db.collection(SESSIONS).doc(sessionId).get();
     let windowInfo: any = { allowCheckIn: false, allowCheckOut: false, reason: 'session_not_found' };
     if (sessionDoc.exists) {
       const session = sessionDoc.data() as Record<string, any>;
       windowInfo = getAttendanceWindow(session.tanggal, session.jamMulai, session.jamSelesai);
     }
- 
-    const snapshot = await db
-      .collection(ATTENDANCES)
-      .where('sessionId', '==', sessionId)
-      .where('userId', '==', userId)
-      .get();
- 
+
+    // [R2] Pakai deterministic ID — cek langsung 2 dokumen (check_in & check_out)
+    // tanpa query. Lebih cepat & gak butuh index.
+    const checkInDoc = await db.collection(ATTENDANCES).doc(`${sessionId}_${userId}_check_in`).get();
+    const checkOutDoc = await db.collection(ATTENDANCES).doc(`${sessionId}_${userId}_check_out`).get();
+
     let hasCheckedIn = false;
     let hasCheckedOut = false;
     let checkInTime: string | null = null;
     let checkOutTime: string | null = null;
- 
-    snapshot.docs.forEach((doc) => {
-      const data = doc.data() as Record<string, any>;
+
+    if (checkInDoc.exists) {
+      hasCheckedIn = true;
+      const data = checkInDoc.data() as Record<string, any>;
       const ts = data.timestamp?.toDate?.() instanceof Date
         ? data.timestamp.toDate()
         : new Date(data.timestamp);
- 
-      if (data.type === 'check_in' || (!data.type && !hasCheckedIn)) {
-        hasCheckedIn = true;
-        checkInTime = ts.toISOString();
-      }
-      if (data.type === 'check_out') {
-        hasCheckedOut = true;
-        checkOutTime = ts.toISOString();
-      }
-    });
- 
+      checkInTime = ts.toISOString();
+    }
+
+    if (checkOutDoc.exists) {
+      hasCheckedOut = true;
+      const data = checkOutDoc.data() as Record<string, any>;
+      const ts = data.timestamp?.toDate?.() instanceof Date
+        ? data.timestamp.toDate()
+        : new Date(data.timestamp);
+      checkOutTime = ts.toISOString();
+    }
+
     return res.json({
       success: true,
       data: {
@@ -424,5 +427,5 @@ router.get('/me/status', async (req: Request, res: Response) => {
     });
   }
 });
- 
+
 export default router;
