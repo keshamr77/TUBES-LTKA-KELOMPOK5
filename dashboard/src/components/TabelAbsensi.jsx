@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
-import { db } from '../firebase';
+import { collection, onSnapshot, query, orderBy, getDocs, where } from 'firebase/firestore';
+import { db, auth } from '../firebase';
 import { useTheme } from '../context/ThemeContext';
 
 export default function TabelAbsensi() {
   const { dark } = useTheme();
   const [data, setData] = useState([]);
   const [sessions, setSessions] = useState([]);
+  const [courses, setCourses] = useState([]);
+  const [courseStudents, setCourseStudents] = useState([]); // students of selected course
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('general');
   const [selectedSession, setSelectedSession] = useState('');
@@ -35,6 +37,35 @@ export default function TabelAbsensi() {
     });
     return () => unsub();
   }, []);
+
+  // Ambil courses milik dosen ini
+  useEffect(() => {
+    const email = auth.currentUser?.email;
+    if (!email) return;
+    const q = query(collection(db, 'courses'), where('dosenEmail', '==', email));
+    const unsub = onSnapshot(q, (snap) => {
+      setCourses(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+    return () => unsub();
+  }, []);
+
+  // Load students when a session with courseId is selected
+  useEffect(() => {
+    const session = sessions.find(s => s.id === selectedSession);
+    if (!session?.courseId) {
+      setCourseStudents([]);
+      return;
+    }
+    const loadStudents = async () => {
+      try {
+        const snap = await getDocs(collection(db, 'courses', session.courseId, 'students'));
+        setCourseStudents(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      } catch (e) {
+        setCourseStudents([]);
+      }
+    };
+    loadStudents();
+  }, [selectedSession, sessions]);
 
   const normalizeStatus = (status) => {
     if (!status) return '-';
@@ -75,6 +106,17 @@ export default function TabelAbsensi() {
     : data;
 
   const selectedSessionData = sessions.find(s => s.id === selectedSession);
+
+  // Hitung mahasiswa yang belum absen (hanya check_in yang dihitung)
+  const checkInData = filteredData.filter(r => r.type === 'check_in' || !r.type);
+  const checkedInNIMs = new Set(checkInData.map(r => r.nim).filter(Boolean));
+  const absentStudents = courseStudents.filter(s => !checkedInNIMs.has(s.nim));
+
+  // Statistik untuk summary
+  const totalTerdaftar = courseStudents.length;
+  const totalHadir = checkInData.filter(r => normalizeStatus(r.status) === 'hadir').length;
+  const totalTerlambat = checkInData.filter(r => normalizeStatus(r.status) === 'terlambat').length;
+  const totalAbsen = totalTerdaftar > 0 ? absentStudents.length : 0;
 
   const thStyle = {
     textAlign: 'left', padding: '10px 16px', fontSize: '11px',
@@ -142,7 +184,7 @@ export default function TabelAbsensi() {
             ))}
           </select>
           {selectedSessionData && (
-            <div style={{ marginTop: '10px', fontSize: '12px', color: sub, display: 'flex', gap: '16px' }}>
+            <div style={{ marginTop: '10px', fontSize: '12px', color: sub, display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
             <span>🕐 {selectedSessionData.jamMulai} – {selectedSessionData.jamSelesai}</span>
               {selectedSessionData.modePilihan === 'wfh' ? (
                 <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', background: '#e3f2fd', color: '#1565c0', fontWeight: '500' }}>🏠 WFH</span>
@@ -159,12 +201,41 @@ export default function TabelAbsensi() {
               }}>
                 {selectedSessionData.status === 'open' ? '🟢 Aktif' : '🔴 Ditutup'}
               </span>
+              {selectedSessionData.courseId && (
+                <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', background: dark ? 'rgba(156,39,176,0.15)' : '#f3e5f5', color: '#7b1fa2', fontWeight: '500' }}>
+                  📚 Terhubung ke Mata Kuliah
+                </span>
+              )}
             </div>
           )}
         </div>
       )}
 
-      {/* Tabel */}
+      {/* Statistik Cards — hanya muncul di per-kelas dengan courseId */}
+      {activeTab === 'perkelas' && selectedSession && totalTerdaftar > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '16px' }}>
+          {[
+            { label: 'Terdaftar', value: totalTerdaftar, color: '#1565c0', bg: dark ? 'rgba(21,101,192,0.12)' : '#e3f2fd', icon: '👥' },
+            { label: 'Hadir', value: totalHadir, color: '#2e7d32', bg: dark ? 'rgba(46,125,50,0.12)' : '#e8f5e9', icon: '✓' },
+            { label: 'Terlambat', value: totalTerlambat, color: '#f57f17', bg: dark ? 'rgba(245,127,23,0.12)' : '#fff8e1', icon: '⏰' },
+            { label: 'Belum Absen', value: totalAbsen, color: '#c62828', bg: dark ? 'rgba(198,40,40,0.12)' : '#ffebee', icon: '✕' },
+          ].map(s => (
+            <div key={s.label} style={{
+              background: s.bg, borderRadius: '10px', padding: '14px 16px',
+              border: `0.5px solid ${border}`,
+            }}>
+              <div style={{ fontSize: '11px', color: s.color, fontWeight: '500', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                {s.icon} {s.label}
+              </div>
+              <div style={{ fontSize: '22px', fontWeight: '700', color: s.color }}>
+                {s.value}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Tabel Absensi */}
       <div style={{ background: bg, borderRadius: '12px', border: `0.5px solid ${border}`, overflow: 'hidden' }}>
         {loading ? (
           <p style={{ padding: '24px', color: sub, fontSize: '14px' }}>Memuat data...</p>
@@ -248,6 +319,44 @@ export default function TabelAbsensi() {
         )}
       </div>
 
+      {/* Tabel Belum Absen — hanya muncul di per-kelas jika ada courseId */}
+      {activeTab === 'perkelas' && selectedSession && absentStudents.length > 0 && (
+        <div style={{ marginTop: '20px' }}>
+          <h3 style={{ fontSize: '14px', fontWeight: '600', color: '#c62828', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            ⚠️ Belum Absen ({absentStudents.length} mahasiswa)
+          </h3>
+          <div style={{ background: bg, borderRadius: '12px', border: `0.5px solid ${border}`, overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+              <thead>
+                <tr>
+                  <th style={thStyle}>#</th>
+                  <th style={thStyle}>NIM</th>
+                  <th style={thStyle}>Nama</th>
+                  <th style={thStyle}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {absentStudents.map((s, i) => (
+                  <tr key={s.id} style={{ background: i % 2 === 0 ? 'transparent' : (dark ? '#161616' : '#fafafa') }}>
+                    <td style={{ ...tdStyle, color: sub, width: '50px' }}>{i + 1}</td>
+                    <td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: '12px' }}>{s.nim}</td>
+                    <td style={tdStyle}>{s.nama}</td>
+                    <td style={tdStyle}>
+                      <span style={{
+                        padding: '3px 10px', borderRadius: '99px', fontSize: '11px',
+                        fontWeight: '500', background: '#ffebee', color: '#c62828',
+                      }}>
+                        ✕ Belum Absen
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* Summary bar */}
       {filteredData.length > 0 && (
         <div style={{ display: 'flex', gap: '16px', marginTop: '12px', fontSize: '12px', color: sub }}>
@@ -261,6 +370,7 @@ export default function TabelAbsensi() {
             </span>
           ))}
           <span>· Total: {filteredData.length}</span>
+          {totalTerdaftar > 0 && <span>· Belum absen: {totalAbsen}</span>}
         </div>
       )}
     </div>
