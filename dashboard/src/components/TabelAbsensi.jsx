@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { collection, onSnapshot, query, orderBy, getDocs, where } from 'firebase/firestore';
-import { db, auth } from '../firebase';
+import { collection, onSnapshot, query, orderBy, getDocs } from 'firebase/firestore';
+import { db } from '../firebase';
 import { useTheme } from '../context/ThemeContext';
 
 export default function TabelAbsensi() {
