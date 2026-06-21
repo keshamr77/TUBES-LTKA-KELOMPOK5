@@ -7,6 +7,7 @@ import attendancesRouter from './routes/attendances';
 import sessionsRouter from './routes/sessions';
 import usersRouter from './routes/users';
 import { startAutoCloseCron } from './cron/autoClose';
+import coursesRouter from './routes/courses';
 
 dotenv.config();
 
@@ -28,6 +29,7 @@ app.use('/health', healthRouter);
 app.use('/api/sessions', sessionsRouter);
 app.use('/api/attendances', attendancesRouter);
 app.use('/api/users', usersRouter);
+app.use('/api/courses', coursesRouter);
 
 // === Root endpoint ===
 app.get('/', (_req: Request, res: Response) => {
