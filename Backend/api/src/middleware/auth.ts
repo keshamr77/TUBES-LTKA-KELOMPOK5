@@ -3,15 +3,19 @@ import admin from 'firebase-admin';
 import { auth } from '../config/firebase';
 
 /**
- * Middleware untuk autentikasi user menggunakan Firebase ID Token.
- * 
+ * Middleware autentikasi user menggunakan Firebase ID Token.
+ *
+ * [R3] Mock fallback (X-Mock-User-Id) sekarang HANYA aktif di non-production.
+ * Di production, request WAJIB pakai Firebase ID Token (Authorization: Bearer).
+ *
  * Flow:
- * 1. Cek header `Authorization: Bearer <token>`
- * 2. Jika ada, verifikasi token tersebut dengan Firebase Admin Auth
- * 3. Jika token valid, inject `userId` dan `userEmail` ke objek `req`
- * 4. Jika token tidak ada atau tidak valid, cek header `X-Mock-User-Id` sebagai fallback
- * 5. Jika kedua cara gagal, kembalikan response 401 Unauthorized
+ * 1. Cek header `Authorization: Bearer <token>` → verify dengan Firebase Admin Auth.
+ * 2. Kalau token valid → inject userId & userEmail dari token.
+ * 3. Mock fallback (X-Mock-User-Id) hanya diterima kalau NODE_ENV !== 'production'.
+ * 4. Kalau semua gagal → 401.
  */
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+
 export const requireAuth = async (
   req: Request,
   res: Response,
@@ -20,22 +24,28 @@ export const requireAuth = async (
   const authHeader = req.headers.authorization;
   const mockUserIdHeader = req.header('X-Mock-User-Id');
 
-  // 1. Verifikasi menggunakan Firebase ID Token (Bearer) jika ada
+  // Helper: terima mock hanya di non-production
+  const tryMockFallback = (): boolean => {
+    if (!IS_PRODUCTION && mockUserIdHeader) {
+      req.userId = mockUserIdHeader;
+      req.userEmail = `${mockUserIdHeader}@mock.local`;
+      return true;
+    }
+    return false;
+  };
+
+  // 1. Verifikasi Firebase ID Token (Bearer) jika ada
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.split('Bearer ')[1];
 
-    // Cek apakah Firebase Admin sudah terinisialisasi
     if (!admin.apps.length) {
-      console.warn('⚠️  Firebase Admin tidak terinisialisasi. Melewati verifikasi JWT.');
-      if (mockUserIdHeader) {
-        req.userId = mockUserIdHeader;
-        return next();
-      }
+      console.warn('⚠️  Firebase Admin tidak terinisialisasi.');
+      if (tryMockFallback()) return next();
       return res.status(501).json({
         success: false,
         error: {
           code: 'FIREBASE_NOT_CONFIGURED',
-          message: 'Firebase Admin tidak terkonfigurasi di server. Silakan hubungi admin.',
+          message: 'Firebase Admin tidak terkonfigurasi di server.',
         },
       });
     }
@@ -46,16 +56,12 @@ export const requireAuth = async (
       req.userEmail = decodedToken.email;
       return next();
     } catch (error: any) {
-      console.error('❌ Gagal memverifikasi Firebase ID Token:', error.message);
-      
-      // Jika token salah/expired tapi ada mock header, gunakan fallback X-Mock-User-Id (di dev & prod selama transisi)
-      if (mockUserIdHeader) {
-        console.warn('⚠️  Token tidak valid, tetapi menggunakan fallback X-Mock-User-Id.');
-        req.userId = mockUserIdHeader;
-        req.userEmail = `${mockUserIdHeader}@mock.local`;
+      console.error('❌ Gagal verify Firebase ID Token:', error.message);
+      // Token invalid → mock fallback HANYA di non-production
+      if (tryMockFallback()) {
+        console.warn('⚠️  Token invalid, pakai X-Mock-User-Id (dev only).');
         return next();
       }
-
       return res.status(401).json({
         success: false,
         error: {
@@ -66,19 +72,19 @@ export const requireAuth = async (
     }
   }
 
-  // 2. Fallback menggunakan X-Mock-User-Id untuk kompatibilitas Phase 1 & Testing
-  if (mockUserIdHeader) {
-    req.userId = mockUserIdHeader;
-    req.userEmail = `${mockUserIdHeader}@mock.local`;
+  // 2. Tidak ada Bearer token → coba mock fallback (dev only)
+  if (tryMockFallback()) {
     return next();
   }
 
-  // 3. Tidak ada metode autentikasi yang valid
+  // 3. Tidak ada metode auth yang valid
   return res.status(401).json({
     success: false,
     error: {
       code: 'UNAUTHORIZED',
-      message: 'Autentikasi diperlukan. Kirim Authorization Bearer token atau X-Mock-User-Id.',
+      message: IS_PRODUCTION
+        ? 'Autentikasi diperlukan. Kirim Authorization Bearer token.'
+        : 'Autentikasi diperlukan. Kirim Authorization Bearer token atau X-Mock-User-Id.',
     },
   });
 };

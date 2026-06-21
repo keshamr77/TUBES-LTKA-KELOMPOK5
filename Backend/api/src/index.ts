@@ -6,6 +6,7 @@ import healthRouter from './routes/health';
 import attendancesRouter from './routes/attendances';
 import sessionsRouter from './routes/sessions';
 import usersRouter from './routes/users';
+import { startAutoCloseCron } from './cron/autoClose';
 
 dotenv.config();
 
@@ -68,4 +69,5 @@ app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📋 Health check: http://localhost:${PORT}/health`);
   console.log(`📚 Docs: API_CONTRACT.md di repo`);
+  startAutoCloseCron();
 });
