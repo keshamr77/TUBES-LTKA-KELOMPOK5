@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   collection, addDoc, onSnapshot, updateDoc,
-  deleteDoc, doc, serverTimestamp, query, orderBy, getDocs
+  deleteDoc, doc, serverTimestamp, query, orderBy, where, getDocs
 } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { useTheme } from '../context/ThemeContext';
@@ -88,13 +88,18 @@ export default function KelolaSesi() {
     return () => unsub();
   }, []);
 
-  // Realtime listener untuk courses
+  // Realtime listener untuk courses — F4: filter di Firestore langsung (Client-side sorting to bypass index req)
   useEffect(() => {
-    const q = query(collection(db, 'courses'), orderBy('createdAt', 'desc'));
+    const email = auth.currentUser?.email;
+    if (!email) return;
+    const q = query(
+      collection(db, 'courses'),
+      where('dosenEmail', '==', email)
+    );
     const unsub = onSnapshot(q, (snap) => {
-      const email = auth.currentUser?.email;
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setCourses(email ? data.filter(c => c.dosenEmail === email) : data);
+      data.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+      setCourses(data);
     });
     return () => unsub();
   }, []);

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   collection, addDoc, onSnapshot, deleteDoc, doc,
-  serverTimestamp, query, orderBy, writeBatch, getDocs, updateDoc
+  serverTimestamp, query, orderBy, where, writeBatch, getDocs, updateDoc
 } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { useTheme } from '../context/ThemeContext';
@@ -37,14 +37,18 @@ export default function KelolaMataKuliah() {
     fontSize: '13px', outline: 'none', background: inputBg, color: text, width: '100%',
   };
 
-  // Realtime listener for courses
+  // Realtime listener for courses — F4: filter di Firestore langsung (Client-side sorting to bypass index req)
   useEffect(() => {
-    const q = query(collection(db, 'courses'), orderBy('createdAt', 'desc'));
+    const email = auth.currentUser?.email;
+    if (!email) { setLoading(false); return; }
+    const q = query(
+      collection(db, 'courses'),
+      where('dosenEmail', '==', email)
+    );
     const unsub = onSnapshot(q, (snap) => {
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      // Filter by dosen
-      const email = auth.currentUser?.email;
-      setCourses(email ? data.filter(c => c.dosenEmail === email) : data);
+      data.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+      setCourses(data);
       setLoading(false);
     });
     return () => unsub();

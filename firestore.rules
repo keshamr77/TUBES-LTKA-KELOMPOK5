@@ -1,0 +1,37 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Users — semua user authenticated bisa baca (untuk cek role saat login)
+    match /users/{userId} {
+      allow read: if request.auth != null;
+    }
+
+    // Sessions — dosen bisa CRUD, semua authenticated bisa read
+    match /sessions/{sessionId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth != null
+        && resource.data.dosenEmail == request.auth.token.email;
+    }
+
+    // Attendances — semua authenticated bisa read & create
+    match /attendances/{attId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+    }
+
+    // Courses — dosen pemilik bisa CRUD, authenticated bisa read
+    match /courses/{courseId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth != null
+        && resource.data.dosenEmail == request.auth.token.email;
+
+      // Students subcollection
+      match /students/{studentId} {
+        allow read, write: if request.auth != null;
+      }
+    }
+  }
+}
