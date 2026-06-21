@@ -7,7 +7,6 @@ export default function TabelAbsensi() {
   const { dark } = useTheme();
   const [data, setData] = useState([]);
   const [sessions, setSessions] = useState([]);
-  const [courses, setCourses] = useState([]);
   const [courseStudents, setCourseStudents] = useState([]); // students of selected course
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('general');
@@ -34,17 +33,6 @@ export default function TabelAbsensi() {
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'sessions'), (snap) => {
       setSessions(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
-    return () => unsub();
-  }, []);
-
-  // Ambil courses milik dosen ini
-  useEffect(() => {
-    const email = auth.currentUser?.email;
-    if (!email) return;
-    const q = query(collection(db, 'courses'), where('dosenEmail', '==', email));
-    const unsub = onSnapshot(q, (snap) => {
-      setCourses(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
     return () => unsub();
   }, []);

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   collection, addDoc, onSnapshot, deleteDoc, doc,
-  serverTimestamp, query, orderBy, where, writeBatch, getDocs, updateDoc
+  serverTimestamp, query, where, writeBatch, getDocs, updateDoc
 } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { useTheme } from '../context/ThemeContext';
